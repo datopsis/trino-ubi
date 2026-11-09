@@ -134,7 +134,7 @@ def inspect_security(name):
     plugins = command('exec', name, 'ls', '-1', '/opt/trino/plugin').stdout.splitlines()
     assert sorted(plugins) == LOCK['plugins']
     command('exec', name, '/bin/bash', '-c',
-            'for p in rpm dnf microdnf yum curl wget javac gcc sshd; do ! command -v "$p" || exit 1; done; '
+            'set -eu; for p in rpm dnf microdnf yum curl wget javac gcc sshd; do ! command -v "$p" || exit 1; done; '
             'test ! -d /etc/yum.repos.d; test ! -d /etc/pki/rpm-gpg; '
             'test ! -d /opt/trino/secrets-plugin; test ! -d /opt/trino/bin; '
             'test -z "$(find / -xdev -type f -perm /6000 -print -quit 2>/dev/null)"')
