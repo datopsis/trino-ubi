@@ -78,3 +78,37 @@ class PolicyTests(unittest.TestCase):
             scanner.gate({}, grype)
         with self.assertRaises(ValueError):
             scanner.gate(trivy, {})
+
+    def test_base_signature_binds_manifest_and_repository(self):
+        from unittest.mock import patch
+        import subprocess
+        artifacts = module('artifacts')
+        expected = 'sha256:' + 'a' * 64
+        repository = 'registry.access.redhat.com/ubi9/ubi-micro'
+        payload = {'critical': {'type': 'atomic container signature',
+                               'image': {'docker-manifest-digest': expected},
+                               'identity': {'docker-reference': repository + ':signed-tag'}}}
+        status = '[GNUPG:] VALIDSIG ' + artifacts.REDHAT[0] + ' rest-of-status\n'
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'signature'
+            def verify(data, signer_status=status):
+                result = subprocess.CompletedProcess([], 0, json.dumps(data), signer_status)
+                with patch.object(artifacts.subprocess, 'run', return_value=result):
+                    return artifacts.verify_base_signature(path, expected, repository)
+            self.assertEqual(verify(payload)['signer'], artifacts.REDHAT[0])
+            for defect in ('digest', 'repository', 'type', 'signer'):
+                altered = copy.deepcopy(payload)
+                signer_status = status
+                if defect == 'digest':
+                    altered['critical']['image']['docker-manifest-digest'] = 'sha256:' + 'b' * 64
+                elif defect == 'repository':
+                    altered['critical']['identity']['docker-reference'] = 'attacker/ubi-micro:signed-tag'
+                elif defect == 'type':
+                    altered['critical']['type'] = 'unrelated signed message'
+                else:
+                    signer_status = '[GNUPG:] VALIDSIG ' + 'F' * 40 + ' rest\n'
+                with self.subTest(defect=defect), self.assertRaises(ValueError):
+                    verify(altered, signer_status)
+            with patch.object(artifacts.subprocess, 'run', side_effect=subprocess.CalledProcessError(1, 'gpg')):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    artifacts.verify_base_signature(path, expected, repository)

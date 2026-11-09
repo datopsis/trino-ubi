@@ -7,7 +7,8 @@ architecture and configuration only, not production or platform qualification.
 ## Contents and trust boundary
 
 - UBI 9.8 Micro runtime and UBI Minimal builder, both pinned by manifest-list
-  digest. Both lists include Linux amd64 and arm64.
+  digest with Red Hat signature verification. Both lists include Linux amd64
+  and arm64.
 - Official `trino-server-core-484.tar.gz` (291,790,975 bytes), plus the separate
   TPCH plugin ZIP. The full 860 MB server distribution is unnecessary.
 - Exactly two plugins: `password-authenticators` and `tpch`. SQL functions and

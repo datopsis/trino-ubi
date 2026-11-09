@@ -1,7 +1,8 @@
 # Artifact acquisition
 
 `artifacts/trino.lock.json` pins both UBI 9.8 manifest lists and their amd64/arm64
-child manifests, upstream core/TPCH archives, Temurin JREs and detached signatures,
+child manifests and their Red Hat signatures, upstream core/TPCH archives,
+Temurin JREs and detached signatures,
 public verification keys, added RPMs, and each extracted bundle manifest.
 The canonical build consumes this committed lock; only refresh resolves versions.
 
@@ -45,11 +46,14 @@ SHA-256. RPM signatures are checked against pinned Red Hat public keys:
 <https://security.access.redhat.com/data/fd431d51.txt> and
 <https://security.access.redhat.com/data/5a6340b3.txt>.
 Base-image packages are inherited through the pinned OCI digest, not independently
-resolved RPM inputs. Base-image publisher signatures are not verified in this
-increment; the OCI digest pins their content. Do not claim full provenance.
+resolved RPM inputs. Base manifest lists and both architecture manifests have Red Hat simple-signing
+signatures from the publisher sigstore. Acquisition verifies the pinned signature
+bytes with the Red Hat key, then checks the signed manifest digest and repository
+identity. Merely obtaining a valid GPG signature is not sufficient. OCI pulls
+verify content against those signed digests.
 
 Acquisition verifies hashes even on cache hits, validates key fingerprints,
-verifies the JRE signature, checks RPM signatures and NEVRAs, rejects unsafe
+verifies UBI and JRE signatures, checks RPM signatures and NEVRAs, rejects unsafe
 archive paths, prunes plugins, and compares the resulting complete file manifest
 with the lock. Assembly rechecks the manifest digest, every file digest and the
 exact file count, rejects links/special files, then installs only local RPMs

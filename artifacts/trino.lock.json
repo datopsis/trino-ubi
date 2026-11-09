@@ -34,6 +34,29 @@
       "platforms": {
         "amd64": "sha256:d330db6880a50fb113069939d5f13599aeab9913c9a4b00c9697a68a2e19c507",
         "arm64": "sha256:ac50cda52b2de3001fdf4b54ffe553c91977caff8e3c0e9a3d340cdb730f2c86"
+      },
+      "signatures": {
+        "index": {
+          "url": "https://access.redhat.com/webassets/docker/content/sigstore/ubi9/ubi-minimal@sha256=f26ef64172ea61f5ac5ba4be8c5c738bf8760b22b3e5148ce7b40f7308ab32db/signature-1",
+          "sha256": "6ba4659701e6de5da673ef4be03fee43cf8393360aef3d4767e542e61add1026",
+          "size": 854,
+          "identity": "registry.access.redhat.com/ubi9/ubi-minimal:1794186410",
+          "signer": "567E347AD0044ADE55BA8A5F199E2F91FD431D51"
+        },
+        "amd64": {
+          "url": "https://access.redhat.com/webassets/docker/content/sigstore/ubi9/ubi-minimal@sha256=d330db6880a50fb113069939d5f13599aeab9913c9a4b00c9697a68a2e19c507/signature-1",
+          "sha256": "22210493aa15e22f064960bd6229417e76831c2ee7de73bee2ff28c58568f879",
+          "size": 856,
+          "identity": "registry.access.redhat.com/ubi9/ubi-minimal:1794186410",
+          "signer": "567E347AD0044ADE55BA8A5F199E2F91FD431D51"
+        },
+        "arm64": {
+          "url": "https://access.redhat.com/webassets/docker/content/sigstore/ubi9/ubi-minimal@sha256=ac50cda52b2de3001fdf4b54ffe553c91977caff8e3c0e9a3d340cdb730f2c86/signature-1",
+          "sha256": "b4f0b93d670c048f37f1d76d27eb98a8b0d083cf055183cb11fd8abb234da993",
+          "size": 853,
+          "identity": "registry.access.redhat.com/ubi9/ubi-minimal:1794186410",
+          "signer": "567E347AD0044ADE55BA8A5F199E2F91FD431D51"
+        }
       }
     },
     "runtime": {
@@ -41,6 +64,29 @@
       "platforms": {
         "amd64": "sha256:166f416557b74411e1ad5350fc6a40b445b4268e79015ca1897de382a9f67151",
         "arm64": "sha256:db72b24113661d21cd4e407a5b5509e051d4c22d2cb08cc44aae4b9e8c19f038"
+      },
+      "signatures": {
+        "index": {
+          "url": "https://access.redhat.com/webassets/docker/content/sigstore/ubi9/ubi-micro@sha256=d3499a0896e2d6a1642f922615831bc5c2fd513bbb34f3446cabba530d9d54a2/signature-1",
+          "sha256": "8a4dbd726d57f41bba1147067ac2be167f20b53961e8efb6d29eab1e8d4cc01e",
+          "size": 853,
+          "identity": "registry.access.redhat.com/ubi9/ubi-micro:1794184697",
+          "signer": "567E347AD0044ADE55BA8A5F199E2F91FD431D51"
+        },
+        "amd64": {
+          "url": "https://access.redhat.com/webassets/docker/content/sigstore/ubi9/ubi-micro@sha256=166f416557b74411e1ad5350fc6a40b445b4268e79015ca1897de382a9f67151/signature-1",
+          "sha256": "1e781e920702dc62ddd21863d2ddf232d2109212ca444c5f46b36b1faf01194a",
+          "size": 853,
+          "identity": "registry.access.redhat.com/ubi9/ubi-micro:1794184697",
+          "signer": "567E347AD0044ADE55BA8A5F199E2F91FD431D51"
+        },
+        "arm64": {
+          "url": "https://access.redhat.com/webassets/docker/content/sigstore/ubi9/ubi-micro@sha256=db72b24113661d21cd4e407a5b5509e051d4c22d2cb08cc44aae4b9e8c19f038/signature-1",
+          "sha256": "5f7bb5eb3b05c17ed48d5e5bbf2dbb5a6a8e0bffe2f0f382f4854f76769916c2",
+          "size": 856,
+          "identity": "registry.access.redhat.com/ubi9/ubi-micro:1794184697",
+          "signer": "567E347AD0044ADE55BA8A5F199E2F91FD431D51"
+        }
       }
     }
   },

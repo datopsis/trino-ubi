@@ -60,6 +60,39 @@ def verify_keys(lock):
             raise ValueError(f'{name} publisher fingerprint mismatch')
 
 
+def verify_base_signature(path, expected_digest, repository):
+    """Verify Red Hat simple-signing identity AND manifest digest, not just GPG."""
+    with tempfile.TemporaryDirectory() as temp:
+        home = Path(temp) / 'gnupg'
+        home.mkdir(mode=0o700)
+        subprocess.run(['gpg', '--batch', '--homedir', str(home), '--import',
+                        str(ROOT / 'artifacts/keys/redhat.asc')], check=True, capture_output=True)
+        checked = subprocess.run(['gpg', '--batch', '--homedir', str(home), '--status-fd=2',
+                                  '--decrypt', str(path)], check=True, capture_output=True, text=True)
+    signers = [line.split()[2] for line in checked.stderr.splitlines()
+               if line.startswith('[GNUPG:] VALIDSIG ')]
+    if len(signers) != 1 or signers[0] not in REDHAT:
+        raise ValueError('base signature is not from a pinned Red Hat publisher')
+    critical = json.loads(checked.stdout)['critical']
+    identity = critical['identity']['docker-reference']
+    if (critical['type'] != 'atomic container signature'
+            or critical['image']['docker-manifest-digest'] != expected_digest
+            or not re.fullmatch(re.escape(repository) + r':[a-zA-Z0-9_.-]+', identity)):
+        raise ValueError('base signature manifest digest or repository identity mismatch')
+    return {'identity': identity, 'signer': signers[0]}
+
+
+def verify_bases(lock, arch):
+    for entry in lock['bases'].values():
+        repository = entry['reference'].split(':')[0]
+        for key in ('index', arch):
+            expected = entry['reference'].split('@')[1] if key == 'index' else entry['platforms'][key]
+            record = entry['signatures'][key]
+            actual = verify_base_signature(download(record), expected, repository)
+            if actual != {k: record[k] for k in ('identity', 'signer')}:
+                raise ValueError('base publisher identity differs from lock')
+
+
 def extract(archive, destination):
     """Reject traversal/devices; resolve internal symlinks into a regular-file tree."""
     with tempfile.TemporaryDirectory() as temp:
@@ -91,6 +124,7 @@ def manifest(bundle):
 def acquire(lock, arch, output, candidate=False):
     validate(lock)
     verify_keys(lock)
+    verify_bases(lock, arch)
     selected = lock['architectures'][arch]
     with tempfile.TemporaryDirectory() as temp:
         temp = Path(temp)
@@ -179,6 +213,8 @@ def validate(lock):
     for role, name in [('builder', 'ubi-minimal'), ('runtime', 'ubi-micro')]:
         if not re.fullmatch(rf'registry.access.redhat.com/ubi9/{name}:9\.8@sha256:[0-9a-f]{{64}}', lock['bases'][role]['reference']):
             raise ValueError('UBI 9.8 digest pin required')
+        if set(lock['bases'][role]['signatures']) != {'index', *ARCHES}:
+            raise ValueError('base index and both platform signatures required')
         if set(lock['bases'][role]['platforms']) != set(ARCHES):
             raise ValueError('both base platforms required')
     def walk(value):
@@ -216,7 +252,18 @@ def base(name):
         if len(matches) != 1:
             raise ValueError('base index lacks unique architecture')
         platforms[arch] = matches[0]['digest']
-    return {'reference': f'registry.access.redhat.com/ubi9/{name}:9.8@{sha}', 'platforms': platforms}
+    signatures = {}
+    repository = f'registry.access.redhat.com/ubi9/{name}'
+    for platform, manifest in {'index': sha, **platforms}.items():
+        url = f'https://access.redhat.com/webassets/docker/content/sigstore/ubi9/{name}@{manifest.replace(":", "=")}/signature-1'
+        data = get(url)
+        record = {'url': url, 'sha256': digest(data), 'size': len(data)}
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'signature'
+            path.write_bytes(data)
+            record.update(verify_base_signature(path, manifest, repository))
+        signatures[platform] = record
+    return {'reference': f'{repository}:9.8@{sha}', 'platforms': platforms, 'signatures': signatures}
 
 
 def resolve_rpms(architecture):

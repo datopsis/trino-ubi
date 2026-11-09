@@ -15,7 +15,7 @@ upstream JAR findings must be fixed by an upstream update, not silently replaced
 or excluded from scans. No report-only job substitutes for the blocking gate.
 
 Trino tarballs/ZIPs are digest-only inputs without publisher-signature assurance.
-Temurin JRE and added Red Hat RPM signatures are verified. Preserve the runtime
+UBI manifest, Temurin JRE and added Red Hat RPM signatures are verified. Preserve the runtime
 guard, read-only configuration, UID 10001, explicit writable paths, capability
 drop and no-new-privileges contract. See docs/CONFIGURATION.md for deployment
 responsibilities and the limits of the authentication guard.

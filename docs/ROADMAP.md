@@ -22,6 +22,5 @@ informed the design but are not a dependency or a conformance claim.
    Kubernetes/OpenShift and disconnected operation. Add external connectors only
    with a stated use case, dependency review, licence review and real integration
    tests. Record exact platform versions before claiming support.
-5. **Supply-chain improvements.** Base publisher-signature verification, SBOM
-   coverage checks, source/malware scanning, reproducibility analysis, long-term
+5. **Supply-chain improvements.** SBOM coverage checks, source/malware scanning, reproducibility analysis, long-term
    evidence retention and automated security-update proposals.
