@@ -39,7 +39,9 @@ bash scripts/build.sh amd64
 CONTAINER_RUNTIME=podman IMAGE=localhost/trino-ubi:dev python3 tests/runtime.py
 ```
 
-Use `arm64` on an ARM host. Set `CONTAINER_RUNTIME=docker` for Docker. The
+Use `arm64` on an ARM host. Set `CONTAINER_RUNTIME=docker` for Docker. Native
+CI uses Docker; the Podman invocation is not yet runtime-qualified because the
+local sandbox blocks namespaces. The
 canonical build fetches and verifies the locked bundle first, pre-pulls the
 locked bases, then assembles with networking disabled and pulls disabled.
 Invoking `Containerfile` without the admitted bundle and its locked manifest

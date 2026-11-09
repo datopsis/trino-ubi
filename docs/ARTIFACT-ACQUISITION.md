@@ -20,7 +20,8 @@ blob-cache-alluxio, blob-cache-memory, exchange-filesystem, functions-python,
 geospatial, password-authenticators, resource-group-managers,
 session-property-managers and spooling-filesystem. Only password-authenticators
 remains. The separately published TPCH ZIP supplies the only data connector.
-All other plugin directories and upstream daemon launchers are removed. Native
+All other plugin directories, the separate keystore-secrets-plugin directory,
+and upstream daemon launchers are removed. Native
 libraries embedded in retained JARs remain upstream bytes, not rebuilt code.
 
 No detached Trino tarball or plugin ZIP signature is published. The lock's

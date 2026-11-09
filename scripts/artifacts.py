@@ -133,6 +133,7 @@ def acquire(lock, arch, output, candidate=False):
         if sorted(p.name for p in plugins.iterdir()) != lock['plugins']:
             raise ValueError('runtime plugin inventory mismatch')
         shutil.rmtree(bundle / 'trino/bin')
+        shutil.rmtree(bundle / 'trino/secrets-plugin')
         (bundle / 'rpms').mkdir()
         rpmdb = temp / 'rpmdb'
         subprocess.run(['rpm', '--dbpath', str(rpmdb), '--initdb'], check=True)
@@ -144,6 +145,10 @@ def acquire(lock, arch, output, candidate=False):
                 raise ValueError('RPM publisher signature verification failed')
             actual = subprocess.check_output(['rpm', '--dbpath', str(rpmdb), '-qp', '--qf',
                                               '%{NAME}-%{EPOCHNUM}:%{VERSION}-%{RELEASE}.%{ARCH}', str(path)], text=True)
+            source = subprocess.check_output(['rpm', '--dbpath', str(rpmdb), '-qp', '--qf',
+                                              '%{SOURCERPM}', str(path)], text=True)
+            if source != item['source_rpm']:
+                raise ValueError('RPM source-package mismatch')
             if actual != item['nevra']:
                 raise ValueError('RPM NEVRA mismatch')
             shutil.copyfile(path, bundle / 'rpms' / item['filename'])
@@ -216,7 +221,7 @@ def base(name):
 
 def resolve_rpms(architecture):
     url = f'https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/{architecture}/baseos/os/'
-    ns = {'r': 'http://linux.duke.edu/metadata/repo', 'c': 'http://linux.duke.edu/metadata/common'}
+    ns = {'r': 'http://linux.duke.edu/metadata/repo', 'c': 'http://linux.duke.edu/metadata/common', 'rpm': 'http://linux.duke.edu/metadata/rpm'}
     root = ET.fromstring(get(url + 'repodata/repomd.xml'))
     data = root.find("r:data[@type='primary']", ns)
     raw = get(url + data.find('r:location', ns).attrib['href'])
@@ -234,7 +239,9 @@ def resolve_rpms(architecture):
         result.append({'name': name, 'architecture': architecture,
                        'nevra': f"{name}-{v['epoch']}:{v['ver']}-{v['rel']}.{architecture}",
                        'url': url + href, 'filename': href.split('/')[-1],
-                       'sha256': p.find('c:checksum', ns).text})
+                       'sha256': p.find('c:checksum', ns).text,
+                       'size': int(p.find('c:size', ns).attrib['package']),
+                       'source_rpm': p.find('c:format/rpm:sourcerpm', ns).text})
     return result
 
 

@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """Real HTTP SQL and fail-closed tests against the exact native container image."""
-import hashlib
 import json
 import os
 import secrets
 import shutil
-import ssl
 import subprocess
 import tempfile
 import time
@@ -25,11 +23,13 @@ def command(*args, check=True, **kwargs):
     return subprocess.run([RUNTIME, *args], check=check, text=True, capture_output=True, **kwargs)
 
 
-def start(extra=(), mounts=True, insecure=False, port=8080):
+def start(extra=(), mounts=True, insecure=False, port=8080, native_tmp=True):
     name = 'trino-test-' + secrets.token_hex(6)
     args = ['run', '-d', '--name', name, '--read-only', '--cap-drop=ALL',
             '--security-opt=no-new-privileges', '--pids-limit=512', '--memory=3g',
-            '-p', f'127.0.0.1::{port}', '--tmpfs', '/tmp/trino:rw,exec,nosuid,nodev,uid=10001,gid=0,mode=0750,size=256m']
+            '-p', f'127.0.0.1::{port}']
+    if native_tmp:
+        args += ['--tmpfs', '/tmp/trino:rw,exec,nosuid,nodev,uid=10001,gid=0,mode=0750,size=256m']
     if mounts:
         args += ['--tmpfs', '/var/lib/trino:rw,noexec,nosuid,nodev,uid=10001,gid=0,mode=0750,size=512m']
     if insecure:
@@ -136,6 +136,7 @@ def inspect_security(name):
     command('exec', name, '/bin/bash', '-c',
             'for p in rpm dnf microdnf yum curl wget javac gcc sshd; do ! command -v "$p" || exit 1; done; '
             'test ! -d /etc/yum.repos.d; test ! -d /etc/pki/rpm-gpg; '
+            'test ! -d /opt/trino/secrets-plugin; test ! -d /opt/trino/bin; '
             'test -z "$(find / -xdev -type f -perm /6000 -print -quit 2>/dev/null)"')
     for file in ('tcp', 'tcp6'):
         sockets = command('exec', name, 'cat', '/proc/net/' + file).stdout
@@ -173,6 +174,8 @@ def main():
     print('PASS SIGTERM shutdown without SIGKILL', flush=True)
     wait_exit(start(), 'authentication required')
     wait_exit(start(insecure=True, mounts=False), '/var/lib/trino')
+    wait_exit(start(insecure=True, native_tmp=False), '/tmp/trino')
+    wait_exit(start(extra=['-e', 'JAVA_TOOL_OPTIONS=-version'], insecure=True), 'Java option environment overrides')
     wait_exit(start(extra=['--user', '0:0']), 'refusing root')
     wait_exit(start(extra=['-e', 'TRINO_UBI_ALLOW_INSECURE=yes']), 'must be true or false')
     with tempfile.TemporaryDirectory() as temp:
@@ -180,6 +183,13 @@ def main():
         temp.chmod(0o755)
         empty = temp / 'empty'; empty.mkdir()
         wait_exit(start(extra=['-v', f'{empty}:/etc/trino:ro'], insecure=True), 'config.properties')
+        cfg = config_copy(temp / 'password-without-tls')
+        with (cfg / 'config.properties').open('a') as stream:
+            stream.write('\nhttp-server.authentication.type=PASSWORD\n')
+        wait_exit(start(extra=['-v', f'{cfg}:/etc/trino:ro']), 'HTTPS enabled and HTTP disabled')
+        cfg = config_copy(temp / 'writable')
+        (cfg / 'config.properties').chmod(0o666)
+        wait_exit(start(extra=['-v', f'{cfg}:/etc/trino:rw'], insecure=True), 'configuration must be read-only')
         cases = [('privileged', '\nhttp-server.https.port=443\n', 'unprivileged port'),
                  ('duplicate', '\nhttp-server.http.port=9090\n', 'duplicate property'),
                  ('escape', '\nhttp-server.authentication.type=PASS\\u0057ORD\n', 'unsupported escape'),

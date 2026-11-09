@@ -1,7 +1,7 @@
 # Third-party notices
 
-Repository packaging is Apache-2.0 (LICENSE). Trino 484 is Apache-2.0; its LICENSE
-and NOTICE and dependency notices embedded in JARs are retained. Retained plugins
+Repository packaging is Apache-2.0 (LICENSE). Trino 484 is Apache-2.0; its NOTICE
+and dependency licence files embedded in JARs are retained. Retained plugins
 are the upstream password authenticators and TPCH generator; no connector licence
 is asserted to cover the entire dependency graph.
 

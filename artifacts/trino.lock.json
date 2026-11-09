@@ -73,7 +73,9 @@
           "nevra": "libstdc++-0:11.5.0-14.el9.x86_64",
           "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/l/libstdc++-11.5.0-14.el9.x86_64.rpm",
           "filename": "libstdc++-11.5.0-14.el9.x86_64.rpm",
-          "sha256": "513df35338962e053052b9d52429e8a5f3d60dfe6b1757cd9faaf61d6abda955"
+          "sha256": "513df35338962e053052b9d52429e8a5f3d60dfe6b1757cd9faaf61d6abda955",
+          "size": 763021,
+          "source_rpm": "gcc-11.5.0-14.el9.src.rpm"
         },
         {
           "name": "zlib",
@@ -81,10 +83,12 @@
           "nevra": "zlib-0:1.2.11-40.el9.x86_64",
           "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/z/zlib-1.2.11-40.el9.x86_64.rpm",
           "filename": "zlib-1.2.11-40.el9.x86_64.rpm",
-          "sha256": "baf95ffbf40ee014135f16fe33e343faf7ff1ca06509fd97cd988e6afeabf670"
+          "sha256": "baf95ffbf40ee014135f16fe33e343faf7ff1ca06509fd97cd988e6afeabf670",
+          "size": 95708,
+          "source_rpm": "zlib-1.2.11-40.el9.src.rpm"
         }
       ],
-      "bundle_sha256": "7d8877864d781a8f93d463d14e61bb49592bbd7ea04e8b3c02a8e3d566ceecca"
+      "bundle_sha256": "51d77d9df742ac1665a3d46b7a9aff9bdf52da2c09f15be4698412c3fd9421f1"
     },
     "arm64": {
       "jre": {
@@ -106,7 +110,9 @@
           "nevra": "libstdc++-0:11.5.0-14.el9.aarch64",
           "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/l/libstdc++-11.5.0-14.el9.aarch64.rpm",
           "filename": "libstdc++-11.5.0-14.el9.aarch64.rpm",
-          "sha256": "ae00c5009a2ee4682ec732cde66d3f4fcfc1a7099ba7b3701767d1748a4f2683"
+          "sha256": "ae00c5009a2ee4682ec732cde66d3f4fcfc1a7099ba7b3701767d1748a4f2683",
+          "size": 723913,
+          "source_rpm": "gcc-11.5.0-14.el9.src.rpm"
         },
         {
           "name": "zlib",
@@ -114,10 +120,12 @@
           "nevra": "zlib-0:1.2.11-40.el9.aarch64",
           "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/z/zlib-1.2.11-40.el9.aarch64.rpm",
           "filename": "zlib-1.2.11-40.el9.aarch64.rpm",
-          "sha256": "2e7f193e67235130c10f5579c2d2ec92e22e4098b6d12fb2855d93b1540c60f7"
+          "sha256": "2e7f193e67235130c10f5579c2d2ec92e22e4098b6d12fb2855d93b1540c60f7",
+          "size": 94454,
+          "source_rpm": "zlib-1.2.11-40.el9.src.rpm"
         }
       ],
-      "bundle_sha256": "d5560c1e40704df865387bb6e15e7f3c8144f36706037586c7f0bbc66d641a66"
+      "bundle_sha256": "bc22ff2ca321c760a149be6483028741f9f6f2f0e60f1ae8dd6df8dc01e4a3fc"
     }
   }
 }
