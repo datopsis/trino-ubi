@@ -1,0 +1,37 @@
+name: Propose lock updates
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - artifacts/**
+      - scripts/artifacts.py
+      - Containerfile
+      - .github/requirements/**
+      - .github/workflows/update-locks.yml
+permissions:
+  contents: read
+jobs:
+  candidates:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install acquisition tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y rpm gnupg
+      - name: Resolve latest UBI 9.8, JRE 25 and RPM candidates for both architectures
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/artifacts.py refresh
+          diff -u artifacts/trino.lock.json candidates/trino.lock.json > candidates/lock.diff || test "$?" = 1
+      - name: Retain candidates for owner review (no commit or PR)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: lock-candidates
+          path: candidates/
+          if-no-files-found: error
+          retention-days: 14

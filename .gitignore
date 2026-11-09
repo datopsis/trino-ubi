@@ -1,0 +1,8 @@
+.artifact-bundle/
+.cache/
+.venv/
+__pycache__/
+*.pyc
+reports/
+candidates/
+.env
