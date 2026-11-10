@@ -1,0 +1,16 @@
+# Regenerate with Python 3.11 or newer and pip-tools 7.6.2:
+# pip-compile --generate-hashes --no-emit-index-url --no-emit-trusted-host \
+#   --no-reuse-hashes --pip-args="--only-binary=:all:" \
+#   --output-file=.github/requirements/pre-commit.txt .github/requirements/pre-commit.in
+cfgv==3.5.0
+distlib==0.4.4
+filelock==4.2.9
+identify==2.6.20
+nodeenv==1.12.0
+platformdirs==4.14.3
+pre-commit==4.7.0
+python-discovery==1.9.0
+PyYAML==6.0.3
+virtualenv==21.15.6
+
+packaging==26.3

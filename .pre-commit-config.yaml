@@ -1,0 +1,15 @@
+minimum_pre_commit_version: '4.0.0'
+repos:
+  - repo: local
+    hooks:
+      - id: repository-lint
+        name: repository syntax and security invariants
+        language: system
+        entry: python3 scripts/lint.py
+        pass_filenames: false
+        always_run: true
+      - id: shellcheck
+        name: shellcheck
+        language: system
+        entry: shellcheck
+        types: [shell]

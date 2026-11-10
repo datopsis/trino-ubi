@@ -1,0 +1,138 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  lint:
+    name: lint and policy tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.13'
+      - name: Install complete hash-locked tooling
+        run: >-
+          python -m pip install --require-hashes --only-binary=:all: -r .github/requirements/pre-commit.txt
+      - name: Install hash-locked ShellCheck
+        run: |
+          python3 scripts/tools.py
+          echo "$PWD/.cache/tools" >> "$GITHUB_PATH"
+      - name: Lint
+        run: pre-commit run --all-files --show-diff-on-failure
+      - name: Policy regression tests
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+  native:
+    name: native image (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            machine: x86_64
+            runner: ubuntu-24.04
+          - arch: arm64
+            machine: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      CONTAINER_RUNTIME: docker
+      IMAGE: localhost/trino-ubi:ci
+      ARCHITECTURE: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify native host and install acquisition tools
+        env:
+          EXPECTED_MACHINE: ${{ matrix.machine }}
+        run: |
+          test "$(uname -m)" = "$EXPECTED_MACHINE"
+          sudo apt-get update -qq
+          sudo apt-get install -y rpm gnupg
+      - name: Acquire verified inputs and assemble offline
+        id: build
+        run: bash scripts/build.sh "$ARCHITECTURE"
+      - name: Export image for independent scanners
+        id: export
+        run: |
+          mkdir reports
+          test "$(docker inspect --format '{{.Architecture}}' "$IMAGE")" = "$ARCHITECTURE"
+          docker save -o "$RUNNER_TEMP/image.tar" "$IMAGE"
+      - name: Restricted runtime and real SQL tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: python3 tests/runtime.py 2>&1 | tee reports/runtime.txt
+      - name: Retain runtime diagnostics before scans
+        if: ${{ !cancelled() && steps.export.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: runtime-${{ matrix.arch }}
+          path: reports/runtime.txt
+          if-no-files-found: error
+          retention-days: 14
+      - name: Download Syft
+        if: ${{ !cancelled() && steps.export.outcome == 'success' }}
+        id: syft
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          syft-version: v1.51.1
+      - name: Generate SPDX SBOM
+        if: ${{ !cancelled() && steps.syft.outcome == 'success' }}
+        env:
+          SYFT_CMD: ${{ steps.syft.outputs.cmd }}
+          SYFT_CHECK_FOR_APP_UPDATE: 'false'
+        run: |
+          "$SYFT_CMD" "docker-archive:$RUNNER_TEMP/image.tar" -o spdx-json=reports/image.spdx.json
+          python3 -c 'import json; s=json.load(open("reports/image.spdx.json")); assert s["spdxVersion"].startswith("SPDX-") and len(s["packages"]) > 50'
+      - name: Download Grype
+        if: ${{ !cancelled() && steps.export.outcome == 'success' }}
+        id: grype
+        uses: anchore/scan-action/download-grype@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          grype-version: v0.118.0
+      - name: Inventory all Grype findings including unfixed
+        if: ${{ !cancelled() && steps.grype.outcome == 'success' }}
+        env:
+          GRYPE_CMD: ${{ steps.grype.outputs.cmd }}
+          GRYPE_CHECK_FOR_APP_UPDATE: 'false'
+        run: '"$GRYPE_CMD" "docker-archive:$RUNNER_TEMP/image.tar" -o json --file reports/grype.json'
+      - name: Inventory all Trivy findings including unfixed
+        if: ${{ !cancelled() && steps.export.outcome == 'success' }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          input: ${{ runner.temp }}/image.tar
+          version: v0.74.0
+          scanners: vuln
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          ignore-unfixed: false
+          list-all-pkgs: true
+          format: json
+          output: reports/trivy.json
+          exit-code: '0'
+          cache: 'false'
+      - name: Block fixed High/Critical in either scanner
+        if: ${{ !cancelled() && steps.export.outcome == 'success' }}
+        run: python3 scripts/scan_gate.py reports/trivy.json reports/grype.json | tee reports/gate.txt
+      - name: Retain SBOM, complete scans and runtime evidence even on failure
+        if: ${{ !cancelled() && steps.export.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: evidence-${{ matrix.arch }}
+          path: reports/
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,8 @@
+*
+!Containerfile
+!.artifact-bundle/
+!.artifact-bundle/**
+!container/
+!container/**
+!LICENSE
+!THIRD_PARTY_NOTICES.md

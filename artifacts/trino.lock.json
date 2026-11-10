@@ -1,0 +1,177 @@
+{
+  "schema": 1,
+  "trino": {
+    "url": "https://github.com/trinodb/trino/releases/download/484/trino-server-core-484.tar.gz",
+    "sha256": "fa6773d94c3943eebf3c07859d544b3420d32ea0a01991b803addd0244aff2c8",
+    "size": 291790975,
+    "version": "484",
+    "license": "Apache-2.0",
+    "verification": "digest-only; no detached tarball signature published",
+    "core_plugins": [
+      "blob-cache-alluxio",
+      "blob-cache-memory",
+      "exchange-filesystem",
+      "functions-python",
+      "geospatial",
+      "password-authenticators",
+      "resource-group-managers",
+      "session-property-managers",
+      "spooling-filesystem"
+    ]
+  },
+  "tpch": {
+    "url": "https://github.com/trinodb/trino/releases/download/484/trino-tpch-484.zip",
+    "sha256": "c21c0cc1781da630343efe27088e83a09550695c2cb6ecd0250e6534209cd538",
+    "size": 16656373
+  },
+  "plugins": [
+    "password-authenticators",
+    "tpch"
+  ],
+  "bases": {
+    "builder": {
+      "reference": "registry.access.redhat.com/ubi9/ubi-minimal:9.8@sha256:f26ef64172ea61f5ac5ba4be8c5c738bf8760b22b3e5148ce7b40f7308ab32db",
+      "platforms": {
+        "amd64": "sha256:d330db6880a50fb113069939d5f13599aeab9913c9a4b00c9697a68a2e19c507",
+        "arm64": "sha256:ac50cda52b2de3001fdf4b54ffe553c91977caff8e3c0e9a3d340cdb730f2c86"
+      },
+      "signatures": {
+        "index": {
+          "url": "https://access.redhat.com/webassets/docker/content/sigstore/ubi9/ubi-minimal@sha256=f26ef64172ea61f5ac5ba4be8c5c738bf8760b22b3e5148ce7b40f7308ab32db/signature-1",
+          "sha256": "6ba4659701e6de5da673ef4be03fee43cf8393360aef3d4767e542e61add1026",
+          "size": 854,
+          "identity": "registry.access.redhat.com/ubi9/ubi-minimal:1794186410",
+          "signer": "567E347AD0044ADE55BA8A5F199E2F91FD431D51"
+        },
+        "amd64": {
+          "url": "https://access.redhat.com/webassets/docker/content/sigstore/ubi9/ubi-minimal@sha256=d330db6880a50fb113069939d5f13599aeab9913c9a4b00c9697a68a2e19c507/signature-1",
+          "sha256": "22210493aa15e22f064960bd6229417e76831c2ee7de73bee2ff28c58568f879",
+          "size": 856,
+          "identity": "registry.access.redhat.com/ubi9/ubi-minimal:1794186410",
+          "signer": "567E347AD0044ADE55BA8A5F199E2F91FD431D51"
+        },
+        "arm64": {
+          "url": "https://access.redhat.com/webassets/docker/content/sigstore/ubi9/ubi-minimal@sha256=ac50cda52b2de3001fdf4b54ffe553c91977caff8e3c0e9a3d340cdb730f2c86/signature-1",
+          "sha256": "b4f0b93d670c048f37f1d76d27eb98a8b0d083cf055183cb11fd8abb234da993",
+          "size": 853,
+          "identity": "registry.access.redhat.com/ubi9/ubi-minimal:1794186410",
+          "signer": "567E347AD0044ADE55BA8A5F199E2F91FD431D51"
+        }
+      }
+    },
+    "runtime": {
+      "reference": "registry.access.redhat.com/ubi9/ubi-micro:9.8@sha256:d3499a0896e2d6a1642f922615831bc5c2fd513bbb34f3446cabba530d9d54a2",
+      "platforms": {
+        "amd64": "sha256:166f416557b74411e1ad5350fc6a40b445b4268e79015ca1897de382a9f67151",
+        "arm64": "sha256:db72b24113661d21cd4e407a5b5509e051d4c22d2cb08cc44aae4b9e8c19f038"
+      },
+      "signatures": {
+        "index": {
+          "url": "https://access.redhat.com/webassets/docker/content/sigstore/ubi9/ubi-micro@sha256=d3499a0896e2d6a1642f922615831bc5c2fd513bbb34f3446cabba530d9d54a2/signature-1",
+          "sha256": "8a4dbd726d57f41bba1147067ac2be167f20b53961e8efb6d29eab1e8d4cc01e",
+          "size": 853,
+          "identity": "registry.access.redhat.com/ubi9/ubi-micro:1794184697",
+          "signer": "567E347AD0044ADE55BA8A5F199E2F91FD431D51"
+        },
+        "amd64": {
+          "url": "https://access.redhat.com/webassets/docker/content/sigstore/ubi9/ubi-micro@sha256=166f416557b74411e1ad5350fc6a40b445b4268e79015ca1897de382a9f67151/signature-1",
+          "sha256": "1e781e920702dc62ddd21863d2ddf232d2109212ca444c5f46b36b1faf01194a",
+          "size": 853,
+          "identity": "registry.access.redhat.com/ubi9/ubi-micro:1794184697",
+          "signer": "567E347AD0044ADE55BA8A5F199E2F91FD431D51"
+        },
+        "arm64": {
+          "url": "https://access.redhat.com/webassets/docker/content/sigstore/ubi9/ubi-micro@sha256=db72b24113661d21cd4e407a5b5509e051d4c22d2cb08cc44aae4b9e8c19f038/signature-1",
+          "sha256": "5f7bb5eb3b05c17ed48d5e5bbf2dbb5a6a8e0bffe2f0f382f4854f76769916c2",
+          "size": 856,
+          "identity": "registry.access.redhat.com/ubi9/ubi-micro:1794184697",
+          "signer": "567E347AD0044ADE55BA8A5F199E2F91FD431D51"
+        }
+      }
+    }
+  },
+  "keys": {
+    "redhat": {
+      "sha256": "0db3dc1b6228f29d60f37c5ad91d9f4cd3547895e8ebedb242469b1c0a0cdf08"
+    },
+    "adoptium": {
+      "sha256": "a46d5d3ab75c3c86dddf1bfd2957a067a24b1c6b2d2ed2bc69294bf970c5160b"
+    }
+  },
+  "architectures": {
+    "amd64": {
+      "jre": {
+        "url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jre_x64_linux_hotspot_25.0.5_8.tar.gz",
+        "sha256": "6fac98f0c8202efc3135a9e9e42aa61963ec42d1c5cbb40caf231e7b14a24ef6",
+        "size": 61736206,
+        "version": "jdk-25.0.5+8",
+        "signature": {
+          "url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jre_x64_linux_hotspot_25.0.5_8.tar.gz.sig",
+          "sha256": "5a05cd892795b092c45bc89d672529cc0d22b5890c7f680b09aa9693f5b1a8b0",
+          "size": 310
+        },
+        "signer": "3B04D753C9050D9A5D343F39843C48A565F8F04B"
+      },
+      "rpms": [
+        {
+          "name": "libstdc++",
+          "architecture": "x86_64",
+          "nevra": "libstdc++-0:11.5.0-14.el9.x86_64",
+          "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/l/libstdc++-11.5.0-14.el9.x86_64.rpm",
+          "filename": "libstdc++-11.5.0-14.el9.x86_64.rpm",
+          "sha256": "513df35338962e053052b9d52429e8a5f3d60dfe6b1757cd9faaf61d6abda955",
+          "size": 763021,
+          "source_rpm": "gcc-11.5.0-14.el9.src.rpm"
+        },
+        {
+          "name": "zlib",
+          "architecture": "x86_64",
+          "nevra": "zlib-0:1.2.11-40.el9.x86_64",
+          "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/z/zlib-1.2.11-40.el9.x86_64.rpm",
+          "filename": "zlib-1.2.11-40.el9.x86_64.rpm",
+          "sha256": "baf95ffbf40ee014135f16fe33e343faf7ff1ca06509fd97cd988e6afeabf670",
+          "size": 95708,
+          "source_rpm": "zlib-1.2.11-40.el9.src.rpm"
+        }
+      ],
+      "bundle_sha256": "51d77d9df742ac1665a3d46b7a9aff9bdf52da2c09f15be4698412c3fd9421f1"
+    },
+    "arm64": {
+      "jre": {
+        "url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jre_aarch64_linux_hotspot_25.0.5_8.tar.gz",
+        "sha256": "963931723891302ebb2687178532c3d793d71e2577cd058061c7efb396140a86",
+        "size": 60517419,
+        "version": "jdk-25.0.5+8",
+        "signature": {
+          "url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jre_aarch64_linux_hotspot_25.0.5_8.tar.gz.sig",
+          "sha256": "a2b622405db790527ee012717647db7dd06c5c2cd70e387b055067ccd3f6cc73",
+          "size": 310
+        },
+        "signer": "3B04D753C9050D9A5D343F39843C48A565F8F04B"
+      },
+      "rpms": [
+        {
+          "name": "libstdc++",
+          "architecture": "aarch64",
+          "nevra": "libstdc++-0:11.5.0-14.el9.aarch64",
+          "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/l/libstdc++-11.5.0-14.el9.aarch64.rpm",
+          "filename": "libstdc++-11.5.0-14.el9.aarch64.rpm",
+          "sha256": "ae00c5009a2ee4682ec732cde66d3f4fcfc1a7099ba7b3701767d1748a4f2683",
+          "size": 723913,
+          "source_rpm": "gcc-11.5.0-14.el9.src.rpm"
+        },
+        {
+          "name": "zlib",
+          "architecture": "aarch64",
+          "nevra": "zlib-0:1.2.11-40.el9.aarch64",
+          "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/z/zlib-1.2.11-40.el9.aarch64.rpm",
+          "filename": "zlib-1.2.11-40.el9.aarch64.rpm",
+          "sha256": "2e7f193e67235130c10f5579c2d2ec92e22e4098b6d12fb2855d93b1540c60f7",
+          "size": 94454,
+          "source_rpm": "zlib-1.2.11-40.el9.src.rpm"
+        }
+      ],
+      "bundle_sha256": "bc22ff2ca321c760a149be6483028741f9f6f2f0e60f1ae8dd6df8dc01e4a3fc"
+    }
+  }
+}
