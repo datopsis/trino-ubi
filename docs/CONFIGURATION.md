@@ -4,7 +4,9 @@ The only qualified topology in this increment is one coordinator that also
 executes worker tasks: `coordinator=true` and
 `node-scheduler.include-coordinator=true`. Multi-node deployment is deferred.
 The minimal plugin set serves generated TPCH data and the built-in system
-catalog; it cannot connect to external databases or object storage.
+catalog, plus Iceberg for operator-supplied REST catalogs and S3-compatible
+storage. Other Iceberg catalog types and file systems are outside this image's
+supported target; Lakekeeper/SeaweedFS queries are not yet qualified.
 
 Mount the complete `/etc/trino` directory read-only to replace configuration.
 Required files are `config.properties`, `node.properties`, `log.properties` and
@@ -32,8 +34,9 @@ credential-bearing deployment example):
 
 The main config (which contains the internal secret), TLS file and password file
 must be readable by UID 10001 but not writable by it or world-accessible. Use
-root ownership with group 0 and mode 0440 on a read-only mount. Do not supply
-secrets through environment variables, image layers or command arguments. Never
+root ownership with group 0 and mode 0440 on a read-only mount. For these guarded server files, do not supply secrets through environment
+variables, image layers or command arguments. The optional catalog example below
+uses Trino's environment secret resolver, outside the entrypoint's guarded files. Never
 commit generated TLS keys, passwords or password hashes. Provision trust and
 client credentials through the deployment's secret manager. Java's Temurin
 truststore is retained; custom trust is the operator's responsibility.
@@ -56,3 +59,45 @@ start, and is only for isolated tests. It does not relax the non-root, mount or
 configuration-syntax guards. Never expose its HTTP port beyond loopback in a
 local test. `TRINO_HEAP_SIZE` is the only Java sizing override; arbitrary Java
 option environment variables and command-line arguments are rejected.
+
+## Iceberg REST and S3 example
+
+**Example only; not shipped as a default catalog.** Create an operator-owned
+`/etc/trino/catalog/iceberg.properties` on the read-only configuration mount:
+
+```properties
+connector.name=iceberg
+iceberg.catalog.type=rest
+iceberg.rest-catalog.uri=${ENV:ICEBERG_REST_URI}
+iceberg.rest-catalog.warehouse=${ENV:ICEBERG_WAREHOUSE}
+iceberg.rest-catalog.security=OAUTH2
+iceberg.rest-catalog.oauth2.token=${ENV:ICEBERG_REST_TOKEN}
+iceberg.rest-catalog.vended-credentials-enabled=false
+fs.s3.enabled=true
+s3.endpoint=${ENV:S3_ENDPOINT}
+s3.region=${ENV:S3_REGION}
+s3.path-style-access=true
+s3.aws-access-key=${ENV:S3_ACCESS_KEY_ID}
+s3.aws-secret-key=${ENV:S3_SECRET_ACCESS_KEY}
+```
+
+Inject credentials from the deployment's secret manager into these environment
+variables; never put literal credentials in the catalog, image, repository or
+command arguments. Catalog files use Trino's `${ENV:...}` resolver; the strict
+entrypoint syntax rules above apply to config/node/password-authenticator files,
+not catalog files. No keystore secret-provider plugin is included.
+
+Set `ICEBERG_REST_URI` to the catalog's Iceberg REST base URI (including its API
+base path), and `ICEBERG_WAREHOUSE` to its warehouse identifier. Set `S3_ENDPOINT`
+to the S3-compatible endpoint and `S3_REGION` to its configured signing region.
+Use HTTPS with operator-provisioned trust for both endpoints. The example uses
+an operator-provisioned bearer token for REST authentication and static S3
+credentials; credential vending is explicitly disabled. Match authentication,
+warehouse and authorization to the actual catalog deployment. This does not
+configure or qualify Lakekeeper or SeaweedFS.
+
+Property names follow Trino 484's [REST catalog documentation](https://github.com/trinodb/trino/blob/484/docs/src/main/sphinx/object-storage/metastores.md#iceberg-rest-catalog)
+and [S3 documentation](https://github.com/trinodb/trino/blob/484/docs/src/main/sphinx/object-storage/file-system-s3.md).
+Only startup, connector registration and catalog creation are tested here;
+remote authentication, table reads/writes and S3 compatibility require the
+separate cross-repository lakehouse integration test.

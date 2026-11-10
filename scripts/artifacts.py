@@ -114,6 +114,22 @@ def extract(archive, destination):
         shutil.copytree(entries[0], destination, symlinks=False)
 
 
+def install_plugin(archive_path, destination, name, version):
+    with zipfile.ZipFile(archive_path) as archive, tempfile.TemporaryDirectory() as temp:
+        extracted = Path(temp)
+        for member in archive.infolist():
+            target = (extracted / member.filename).resolve()
+            if not target.is_relative_to(extracted.resolve()):
+                raise ValueError('unsafe plugin ZIP path')
+            if (member.external_attr >> 16) & 0o170000 == 0o120000:
+                raise ValueError('plugin ZIP symlinks forbidden')
+        archive.extractall(extracted)
+        entries = list(extracted.iterdir())
+        if len(entries) != 1 or entries[0].name != f'trino-{name}-{version}' or not entries[0].is_dir():
+            raise ValueError(f'unexpected {name} ZIP layout')
+        shutil.copytree(entries[0], destination)
+
+
 def manifest(bundle):
     files = sorted(p for p in bundle.rglob('*') if p.is_file() and p != bundle / 'SHA256SUMS')
     if any(p.is_symlink() or not (p.is_file() or p.is_dir()) for p in bundle.rglob('*')):
@@ -143,7 +159,7 @@ def acquire(lock, arch, output, candidate=False):
         extract(download(lock['trino']), bundle / 'trino')
         extract(jre, bundle / 'jre')
         # The core tarball has no data connector. Retain the password plugin
-        # and add only TPCH, whose generated data exercises real split execution.
+        # and add TPCH plus Iceberg for operator-supplied REST/S3 catalogs.
         plugins = bundle / 'trino/plugin'
         actual = sorted(p.name for p in plugins.iterdir())
         if actual != lock['trino']['core_plugins']:
@@ -151,19 +167,8 @@ def acquire(lock, arch, output, candidate=False):
         for plugin in plugins.iterdir():
             if plugin.name != 'password-authenticators':
                 shutil.rmtree(plugin)
-        with zipfile.ZipFile(download(lock['tpch'])) as archive:
-            for member in archive.infolist():
-                target = (plugins / 'tpch' / member.filename).resolve()
-                if not target.is_relative_to((plugins / 'tpch').resolve()):
-                    raise ValueError('unsafe plugin ZIP path')
-                if (member.external_attr >> 16) & 0o170000 == 0o120000:
-                    raise ValueError('plugin ZIP symlinks forbidden')
-            extracted = temp / 'tpch-extracted'
-            archive.extractall(extracted)
-            entries = list(extracted.iterdir())
-            if len(entries) != 1 or entries[0].name != 'trino-tpch-' + lock['trino']['version']:
-                raise ValueError('unexpected TPCH ZIP layout')
-            shutil.copytree(entries[0], plugins / 'tpch')
+        for name in ('tpch', 'iceberg'):
+            install_plugin(download(lock[name]), plugins / name, name, lock['trino']['version'])
         if sorted(p.name for p in plugins.iterdir()) != lock['plugins']:
             raise ValueError('runtime plugin inventory mismatch')
         shutil.rmtree(bundle / 'trino/bin')
@@ -205,10 +210,11 @@ def validate(lock):
         raise ValueError('invalid Trino version')
     version = lock['trino']['version']
     for key, filename in [('trino', f'trino-server-core-{version}.tar.gz'),
-                          ('tpch', f'trino-tpch-{version}.zip')]:
+                          ('tpch', f'trino-tpch-{version}.zip'),
+                          ('iceberg', f'trino-iceberg-{version}.zip')]:
         if lock[key]['url'] != f'https://github.com/trinodb/trino/releases/download/{version}/{filename}':
             raise ValueError('only official Trino release assets are permitted')
-    if lock['plugins'] != ['password-authenticators', 'tpch']:
+    if lock['plugins'] != ['iceberg', 'password-authenticators', 'tpch']:
         raise ValueError('unexpected plugin set')
     for role, name in [('builder', 'ubi-minimal'), ('runtime', 'ubi-micro')]:
         if not re.fullmatch(rf'registry.access.redhat.com/ubi9/{name}:9\.8@sha256:[0-9a-f]{{64}}', lock['bases'][role]['reference']):
@@ -315,7 +321,8 @@ def refresh(version, output):
                                'functions-python', 'geospatial', 'password-authenticators',
                                'resource-group-managers', 'session-property-managers', 'spooling-filesystem'])
     lock = {'schema': 1, 'trino': trino, 'tpch': release_asset(release, f'trino-tpch-{version}.zip'),
-            'plugins': ['password-authenticators', 'tpch'],
+            'iceberg': release_asset(release, f'trino-iceberg-{version}.zip'),
+            'plugins': ['iceberg', 'password-authenticators', 'tpch'],
             'bases': {role: base(name) for role, name in [('builder', 'ubi-minimal'), ('runtime', 'ubi-micro')]},
             'keys': {name: {'sha256': digest((ROOT / f'artifacts/keys/{name}.asc').read_bytes())}
                      for name in ('redhat', 'adoptium')}, 'architectures': {}}

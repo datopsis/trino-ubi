@@ -20,10 +20,14 @@ class PolicyTests(unittest.TestCase):
         artifacts = module('artifacts')
         lock = json.loads((ROOT / 'artifacts/trino.lock.json').read_text())
         artifacts.validate(lock)
-        for change in ('edition', 'digest', 'architecture', 'base'):
+        for change in ('edition', 'iceberg-source', 'digest', 'architecture', 'base', 'plugins'):
             broken = copy.deepcopy(lock)
             if change == 'edition':
                 broken['trino']['url'] = broken['trino']['url'].replace('trinodb/trino', 'untrusted/trino')
+            elif change == 'iceberg-source':
+                broken['iceberg']['url'] = broken['iceberg']['url'].replace('/484/', '/483/')
+            elif change == 'plugins':
+                broken['plugins'].remove('iceberg')
             elif change == 'digest':
                 broken['trino']['sha256'] = 'bad'
             elif change == 'architecture':
@@ -58,6 +62,34 @@ class PolicyTests(unittest.TestCase):
                 tar.addfile(item, io.BytesIO(b'x'))
             with self.assertRaises(ValueError):
                 module('artifacts').extract(path, Path(temp) / 'output')
+
+    def test_plugin_zip_admission(self):
+        import stat
+        import zipfile
+        artifacts = module('artifacts')
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name in ('tpch', 'iceberg'):
+                archive = root / f'{name}.zip'
+                expected = f'trino-{name}-484/'
+                for defect in ('traversal', 'symlink', 'layout', 'valid'):
+                    with zipfile.ZipFile(archive, 'w') as z:
+                        if defect == 'symlink':
+                            info = zipfile.ZipInfo(expected + 'link')
+                            info.external_attr = (stat.S_IFLNK | 0o777) << 16
+                            z.writestr(info, '/etc/passwd')
+                        else:
+                            path = {'traversal': '../escape', 'layout': 'other/file',
+                                    'valid': expected + 'plugin.jar'}[defect]
+                            z.writestr(path, b'upstream bytes')
+                    with self.subTest(plugin=name, defect=defect):
+                        destination = root / name
+                        if defect == 'valid':
+                            artifacts.install_plugin(archive, destination, name, '484')
+                            self.assertEqual((destination / 'plugin.jar').read_bytes(), b'upstream bytes')
+                        else:
+                            with self.assertRaises(ValueError):
+                                artifacts.install_plugin(archive, destination, name, '484')
 
     def test_scan_gate_blocks_each_scanner(self):
         scanner = module('scan_gate')

@@ -4,6 +4,12 @@
 
 ### Added
 
+- Official digest-pinned Trino 484 Iceberg plugin for operator-supplied REST
+  catalogs and S3-compatible storage with static credentials and path-style
+  access; no default Iceberg catalog. Documented an environment-secret example.
+- Hardened runtime checks for Iceberg registration and a mounted REST/S3 catalog
+  on native amd64/arm64; Lakekeeper/SeaweedFS queries remain separate work.
+
 - Trino 484 core plus TPCH on digest-pinned UBI 9.8 Micro, with verified Temurin
   JRE 25 and architecture-specific RPM inputs.
 - Non-root, read-only-root runtime contract and fail-closed authentication guard
