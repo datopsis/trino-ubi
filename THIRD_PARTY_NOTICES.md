@@ -2,7 +2,8 @@
 
 Repository packaging is Apache-2.0 (LICENSE). Trino 484 is Apache-2.0; its NOTICE
 and dependency licence files embedded in JARs are retained. Retained plugins
-are the upstream password authenticators and TPCH generator; no connector licence
+are the upstream password authenticators, TPCH generator and Iceberg connector;
+no connector licence
 is asserted to cover the entire dependency graph.
 
 Eclipse Temurin OpenJDK is GPL version 2 with the Classpath Exception and carries

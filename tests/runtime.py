@@ -23,7 +23,7 @@ def command(*args, check=True, **kwargs):
     return subprocess.run([RUNTIME, *args], check=check, text=True, capture_output=True, **kwargs)
 
 
-def start(extra=(), mounts=True, insecure=False, port=8080, native_tmp=True):
+def start(extra=(), mounts=True, insecure=False, port=8080, native_tmp=True, env=None):
     name = 'trino-test-' + secrets.token_hex(6)
     args = ['run', '-d', '--name', name, '--read-only', '--cap-drop=ALL',
             '--security-opt=no-new-privileges', '--pids-limit=512', '--memory=3g',
@@ -35,7 +35,7 @@ def start(extra=(), mounts=True, insecure=False, port=8080, native_tmp=True):
     if insecure:
         args += ['-e', 'TRINO_UBI_ALLOW_INSECURE=true']
     CONTAINERS.append(name)
-    command(*args, *extra, IMAGE)
+    command(*args, *extra, IMAGE, env=env)
     return name
 
 
@@ -168,6 +168,9 @@ def main():
     assert query(base, "SELECT count(*) FROM system.runtime.nodes WHERE state = 'active'") == [[1]]
     print('PASS real SQL: version(), 25 TPCH nations, one active coordinator/worker', flush=True)
     inspect_security(name)
+    assert 'Registering connector iceberg' in logs(name), logs(name)
+    assert query(base, 'SHOW CATALOGS') == [['system'], ['tpch']]
+    print('PASS Iceberg plugin registered; no default Iceberg catalog', flush=True)
     command('stop', '--time', '30', name)
     exit_code = json.loads(command('inspect', name).stdout)[0]['State']['ExitCode']
     assert exit_code in (0, 143), f'unclean shutdown: {exit_code}'
@@ -181,6 +184,33 @@ def main():
     with tempfile.TemporaryDirectory() as temp:
         temp = Path(temp)
         temp.chmod(0o755)
+        cfg = config_copy(temp / 'iceberg-rest-s3')
+        # Catalog creation is local; upstream defers REST calls until metadata
+        # access. Closed loopback ports ensure this is not an integration test.
+        (cfg / 'catalog/iceberg.properties').write_text(
+            'connector.name=iceberg\n'
+            'iceberg.catalog.type=rest\n'
+            'iceberg.rest-catalog.uri=http://127.0.0.1:9\n'
+            'iceberg.rest-catalog.vended-credentials-enabled=false\n'
+            'fs.s3.enabled=true\n'
+            's3.endpoint=http://127.0.0.1:9\n'
+            's3.region=us-east-1\n'
+            's3.path-style-access=true\n'
+            's3.aws-access-key=${ENV:ICEBERG_TEST_ACCESS_KEY}\n'
+            's3.aws-secret-key=${ENV:ICEBERG_TEST_SECRET_KEY}\n')
+        # Ephemeral values have no backing account and are never committed.
+        env = dict(os.environ, ICEBERG_TEST_ACCESS_KEY=secrets.token_hex(16),
+                   ICEBERG_TEST_SECRET_KEY=secrets.token_hex(32))
+        iceberg = start(extra=['-v', f'{cfg}:/etc/trino:ro',
+                               '-e', 'ICEBERG_TEST_ACCESS_KEY', '-e', 'ICEBERG_TEST_SECRET_KEY'],
+                        insecure=True, env=env)
+        iceberg_base = endpoint(iceberg, 8080)
+        ready(iceberg, iceberg_base)
+        assert query(iceberg_base, 'SHOW CATALOGS') == [['iceberg'], ['system'], ['tpch']]
+        assert 'Registering connector iceberg' in logs(iceberg), logs(iceberg)
+        inspect_security(iceberg)
+        print('PASS mounted Iceberg REST/S3 catalog, static credentials, path-style access; no remote query', flush=True)
+        command('stop', '--time', '30', iceberg)
         empty = temp / 'empty'; empty.mkdir()
         wait_exit(start(extra=['-v', f'{empty}:/etc/trino:ro'], insecure=True), 'config.properties')
         cfg = config_copy(temp / 'password-without-tls')
