@@ -7,12 +7,20 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tests'))
 sys.path.insert(0, str(ROOT / 'scripts'))
 import tls_policy
-from tls_runtime import properties, protocol_rejection, validate_config
+from tls_runtime import is_loopback_socket, properties, protocol_rejection, validate_config
 
 
 class TLSPolicyTests(unittest.TestCase):
     def test_executable_sources_have_no_verification_downgrades(self):
         tls_policy.check_repository(ROOT)
+
+    def test_ipv4_and_mapped_ipv6_loopback_sockets(self):
+        self.assertTrue(is_loopback_socket('0100007F'))
+        self.assertTrue(is_loopback_socket('0000000000000000FFFF00000100007F'))
+        self.assertTrue(is_loopback_socket('00000000000000000000000001000000'))
+        self.assertFalse(is_loopback_socket('00000000'))
+        self.assertFalse(is_loopback_socket('00000000000000000000000000000000'))
+        self.assertFalse(is_loopback_socket('0100000A'))
 
     def test_plaintext_protocol_rejection(self):
         self.assertTrue(protocol_rejection(bytes.fromhex('15030300020250')))

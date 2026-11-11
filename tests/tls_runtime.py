@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Native image qualification; fresh JVMs and verified controls around mutations."""
+import ipaddress
 import json
 import os
 import re
@@ -42,6 +43,17 @@ def resolve(host, *args, **kwargs):
 def record(edge, case, outcome):
     RESULTS.append({'edge': edge, 'case': case, 'outcome': outcome})
     print(f'PASS {edge}: {case}: {outcome}', flush=True)
+
+
+def is_loopback_socket(encoded):
+    # Linux procfs renders addresses as native-endian 32-bit words. The JVM
+    # commonly represents an IPv4 bind using an IPv4-mapped IPv6 socket.
+    packed = b''.join(int(encoded[i:i + 8], 16).to_bytes(4, sys.byteorder)
+                      for i in range(0, len(encoded), 8))
+    address = ipaddress.ip_address(packed)
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+        address = address.ipv4_mapped
+    return address.is_loopback
 
 
 def protocol_rejection(response):
@@ -276,7 +288,7 @@ class Rehearsal:
             for line in rt.command('exec', self.name, 'cat', '/proc/1/net/' + family).stdout.splitlines()[1:]:
                 parts = line.split()
                 if parts[3] == '0A' and f'socket:[{parts[9]}]' in descriptors:
-                    assert family == 'tcp' and parts[1].split(':')[0] == '0100007F', 'test listener must bind loopback'
+                    assert is_loopback_socket(parts[1].split(':')[0]), f'test listener must bind loopback: {family} {parts[1]}'
                     ports.add(int(parts[1].split(':')[1], 16))
         assert ports == {8443}, ports
         self.socket_ports = sorted(ports)
