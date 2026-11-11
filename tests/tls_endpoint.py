@@ -145,16 +145,33 @@ class InternalRelay:
             context.set_alpn_protocols([incoming.selected_alpn_protocol() or 'http/1.1'])
             upstream = context.wrap_socket(socket.create_connection(('127.0.0.1', 8443), timeout=10), server_hostname='trino')
             self.connections.extend((incoming, upstream))
-            # A single thread owns both SSL objects: concurrent SSL_read and
-            # SSL_write on one object can corrupt TLS 1.3 record state.
+            # One thread owns both SSL objects; buffer nonblocking writes so
+            # TLS 1.3 tickets and HTTP/2 backpressure cannot deadlock a direction.
+            incoming.setblocking(False); upstream.setblocking(False)
+            pending = {incoming: bytearray(), upstream: bytearray()}
+            finished = False
             while not self.stopping:
-                readable, _, _ = select.select([incoming, upstream], [], [], 1)
+                readers = [] if finished else [stream for stream in pending if len(pending[upstream if stream is incoming else incoming]) < 1048576]
+                writers = [stream for stream, data in pending.items() if data]
+                readable, writable, _ = select.select(readers, writers, [], 1)
                 for source, destination in ((incoming, upstream), (upstream, incoming)):
-                    if source in readable or source.pending():
-                        chunk = source.recv(65536)
-                        if not chunk:
-                            return
-                        destination.sendall(chunk)
+                    if source in readable or (source in readers and source.pending()):
+                        try:
+                            chunk = source.recv(65536)
+                            if chunk:
+                                pending[destination].extend(chunk)
+                            else:
+                                finished = True
+                        except (ssl.SSLWantReadError, ssl.SSLWantWriteError):
+                            pass
+                for destination in writable:
+                    try:
+                        sent = destination.send(pending[destination])
+                        del pending[destination][:sent]
+                    except (ssl.SSLWantReadError, ssl.SSLWantWriteError):
+                        pass
+                if finished and not any(pending.values()):
+                    return
         except (OSError, ssl.SSLError, ValueError):
             pass
         finally:
