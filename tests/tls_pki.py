@@ -38,7 +38,7 @@ def prepare(root):
                 f'new_certs_dir={root}\ncertificate={root}/{issuer}.crt\nprivate_key={root}/{issuer}.key\n'
                 'default_md=sha256\npolicy=policy\nx509_extensions=leaf\n[policy]\ncommonName=supplied\n'
                 f'[leaf]\nbasicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\n'
-                f'extendedKeyUsage=serverAuth\nsubjectAltName=DNS:{san}\n')
+                f'extendedKeyUsage=serverAuth\nsubjectAltName=DNS:{san}' + ((',IP:127.0.0.2' if variant in ('wrong-san', 'other-service') else ',IP:127.0.0.1') if role == 'trino' else '') + '\n')
             start = now - dt.timedelta(hours=2) if variant == 'expired' else now - dt.timedelta(minutes=5)
             end = now - dt.timedelta(hours=1) if variant == 'expired' else now + dt.timedelta(hours=6)
             openssl('ca', '-batch', '-notext', '-config', root / 'issue.cnf',

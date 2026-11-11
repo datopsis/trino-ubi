@@ -92,3 +92,16 @@ diagnostics remain under ignored `.runtime/diagnostics` on the runner only.
 No Phase A completion claim is made until native per-edge negatives and the
 separate cross-service Integration gate pass. Password authentication,
 authorization, rotation, revocation and multi-node qualification remain separate.
+
+Trino 484's default ANNOUNCE inventory skips discovery announcements when the
+coordinator URI equals its own advertised URI. The internal discovery rehearsal
+therefore explicitly retains `https://127.0.0.1:8443` as a distinct URI and adds
+that exact IP SAN to Trino's test leaf; it does not certify bridge addresses.
+The separate self-worker rehearsal keeps that discovery path valid and routes
+the advertised Trino name through a TLS-to-TLS mutation relay on 127.0.0.2.
+The relay negotiates HTTP/2, verifies the real Trino server with the run CA, and
+never records application bytes. The real Trino task client must reject each
+mutated relay certificate during a TPCH query. A per-client announcer truststore
+keeps discovery valid when testing a wrong self-worker trust bundle. This fixture
+routing is solely for independent negative evidence, not an image dependency or
+a deployment proxy requirement.

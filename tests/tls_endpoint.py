@@ -91,3 +91,75 @@ class Endpoint(ThreadingHTTPServer):
         self.shutdown()
         self.server_close()
         self.thread.join()
+
+
+class InternalRelay:
+    """TLS on both sides, to mutate only the actual self-worker connection.
+
+    Opaque HTTP/2 bytes are forwarded after TLS termination. No application data
+    is parsed, retained or logged; the upstream always verifies Trino's run CA.
+    """
+    def __init__(self, pki):
+        import socket
+        self.pki = pki
+        self.listener = socket.socket()
+        self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.listener.bind(('127.0.0.2', 8443))
+        self.listener.listen()
+        self.listener.settimeout(1)
+        self.stopping = False
+        self.connections = []
+        self.select('valid')
+        self.thread = threading.Thread(target=self.serve, daemon=True)
+        self.thread.start()
+
+    def select(self, variant):
+        for connection in self.connections:
+            connection.close()
+        self.connections.clear()
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.set_alpn_protocols(['h2', 'http/1.1'])
+        prefix = self.pki / f'trino-{variant}'
+        context.load_cert_chain(str(prefix) + '.crt', str(prefix) + '.key')
+        self.context = context
+
+    def serve(self):
+        import socket
+        while not self.stopping:
+            try:
+                connection, _ = self.listener.accept()
+                threading.Thread(target=self.forward, args=(connection,), daemon=True).start()
+            except (TimeoutError, OSError):
+                if self.stopping:
+                    return
+
+    def forward(self, connection):
+        import socket
+        def copy(source, destination):
+            try:
+                while chunk := source.recv(65536):
+                    destination.sendall(chunk)
+            except (OSError, ssl.SSLError):
+                pass
+            finally:
+                source.close(); destination.close()
+        try:
+            connection.settimeout(10)
+            incoming = self.context.wrap_socket(connection, server_side=True)
+            context = ssl.create_default_context(cafile=self.pki / 'ca.crt')
+            context.set_alpn_protocols([incoming.selected_alpn_protocol() or 'http/1.1'])
+            upstream = context.wrap_socket(socket.create_connection(('127.0.0.1', 8443), timeout=10), server_hostname='trino')
+            self.connections.extend((incoming, upstream))
+            incoming.settimeout(None); upstream.settimeout(None)
+            threading.Thread(target=copy, args=(incoming, upstream), daemon=True).start()
+            copy(upstream, incoming)
+        except (OSError, ssl.SSLError):
+            connection.close()
+
+    def close(self):
+        self.stopping = True
+        self.listener.close()
+        for connection in self.connections:
+            connection.close()
+        self.thread.join(timeout=2)

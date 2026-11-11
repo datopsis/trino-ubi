@@ -3,6 +3,7 @@
 import json
 import os
 import shutil
+import ssl
 import subprocess
 import time
 import urllib.error
@@ -39,13 +40,22 @@ def wait_exit(name, diagnostic, timeout=120):
     raise AssertionError(f'expected failure {diagnostic!r}; still running: {logs(name)}')
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *_args, **_kwargs):
+        raise AssertionError('unexpected redirect from TLS endpoint')
+
+
 def request(url, sql=None, context=None, credentials=None):
+    assert url.startswith('https://')
+    assert context is not None and context.check_hostname and context.verify_mode == ssl.CERT_REQUIRED
     headers = {'X-Trino-User': 'runtime-test'}
     if credentials:
         import base64
         headers['Authorization'] = 'Basic ' + base64.b64encode(credentials.encode()).decode()
     req = urllib.request.Request(url, data=sql.encode() if sql else None, headers=headers)
-    with urllib.request.urlopen(req, timeout=10, context=context) as response:
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}),
+                                          urllib.request.HTTPSHandler(context=context), NoRedirect())
+    with opener.open(req, timeout=10) as response:
         return json.load(response)
 
 

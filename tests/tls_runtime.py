@@ -15,7 +15,7 @@ import urllib.request
 from pathlib import Path
 
 import runtime as rt
-from tls_endpoint import Endpoint
+from tls_endpoint import Endpoint, InternalRelay
 from tls_pki import cleanup, prepare, protect
 
 ROOT = rt.ROOT
@@ -26,9 +26,9 @@ BASE = 'https://trino:8443'
 TLS_ERRORS = {
     'wrong-ca': r'PKIX path building failed|unable to find valid certification path',
     'wrong-trust': r'PKIX path building failed|unable to find valid certification path',
-    'wrong-san': r'No subject alternative DNS name matching|Certificate for .* doesn.t match|No name matching',
-    'other-service': r'No subject alternative DNS name matching|Certificate for .* doesn.t match|No name matching',
-    'alias': r'No subject alternative DNS name matching|Certificate for .* doesn.t match|No name matching',
+    'wrong-san': r'No subject alternative (?:DNS name|names) matching|Certificate for .* doesn.t match|No name matching',
+    'other-service': r'No subject alternative (?:DNS name|names) matching|Certificate for .* doesn.t match|No name matching',
+    'alias': r'No subject alternative (?:DNS name|names) matching|Certificate for .* doesn.t match|No name matching',
     'expired': r'CertificateExpiredException|validity check failed|NotAfter:',
 }
 ORIGINAL_RESOLVE = socket.getaddrinfo
@@ -97,6 +97,7 @@ class Rehearsal:
         urllib.request.install_opener(urllib.request.build_opener(urllib.request.ProxyHandler({})))
         self.rest, self.s3 = Endpoint('catalog', self.pki), Endpoint('s3', self.pki)
         self.name = None
+        self.relay = None
         # Build truststores with the image's keytool, no compiler/tool dependency.
         for ca in ('ca', 'unrelated'):
             folder = root / ca
@@ -119,6 +120,12 @@ class Rehearsal:
 
     def start(self, variant='valid', edge='inbound', defect=None, extra=(), login_exception=True, mounts=True, native_tmp=True):
         self.stop()
+        if self.relay:
+            self.relay.close()
+            self.relay = None
+        if edge == 'self-worker':
+            self.relay = InternalRelay(self.pki)
+            self.relay.select(variant if variant not in ('alias', 'wrong-trust') else 'valid')
         self.rest.select(variant if edge == 'REST' and variant not in ('alias', 'wrong-trust') else 'valid')
         self.s3.select(variant if edge == 'S3' and variant not in ('alias', 'wrong-trust') else 'valid')
         if edge == 'S3' and variant == 'wrong-trust':
@@ -131,9 +138,9 @@ class Rehearsal:
         shutil.copyfile(self.pki / f'trino-{leaf}.pem', material / 'server.pem')
         trust = 'unrelated' if variant == 'wrong-trust' and edge in ('REST', 'S3') else 'ca'
         shutil.copyfile(self.root / trust / 'trust.p12', material / 'trust.p12')
-        shutil.copyfile(self.pki / ('unrelated.crt' if edge == 'internal' and variant == 'wrong-trust' else 'ca.crt'), material / 'internal-ca.pem')
+        shutil.copyfile(self.pki / ('unrelated.crt' if edge in ('internal', 'self-worker') and variant == 'wrong-trust' else 'ca.crt'), material / 'internal-ca.pem')
         (material / 'password').write_text(self.password + '\n')
-        address = 'alias' if edge == 'internal' and variant == 'alias' else 'trino'
+        address = 'alias' if edge == 'self-worker' and variant == 'alias' else 'trino'
         (cfg / 'node.properties').write_text(
             'node.environment=testing\nnode.id=single-node\nnode.data-dir=/var/lib/trino\n' + f'node.internal-address={address}\n')
         (cfg / 'config.properties').write_text(
@@ -146,6 +153,19 @@ class Rehearsal:
             f'internal-communication.shared-secret={self.shared}\ndiscovery.uri=https://{address}:8443\n'
             'query.max-memory=256MB\nquery.max-memory-per-node=256MB\nmemory.heap-headroom-per-node=256MB\n'
             'http-server.log.enabled=false\n')
+        if edge == 'internal':
+            conf = cfg / 'config.properties'
+            target = 'alias' if variant == 'alias' else '127.0.0.1'
+            conf.write_text(conf.read_text().replace(f'discovery.uri=https://{address}:8443', f'discovery.uri=https://{target}:8443'))
+        if edge == 'self-worker':
+            # Real discovery bypasses the mutation relay. Self-worker requests
+            # retain their advertised DNS name and go through the TLS relay.
+            conf = cfg / 'config.properties'
+            conf.write_text(conf.read_text().replace(f'discovery.uri=https://{address}:8443', 'discovery.uri=https://127.0.0.1:8443') +
+                            'announcer.http-client.trust-store-path=/run/tls/discovery-ca.pem\nquery.remote-task.max-error-duration=5s\n')
+            shutil.copyfile(self.pki / 'ca.crt', material / 'discovery-ca.pem')
+            with (cfg / 'node.properties').open('a') as stream:
+                stream.write('node.bind-ip=127.0.0.1\n')
         (cfg / 'truststore.properties').write_text('path=/run/tls/trust.p12\ntype=PKCS12\npassword-file=/run/tls/password\n')
         if edge in ('REST', 'S3'):
             rest_host = 'alias' if edge == 'REST' and variant == 'alias' else 'catalog'
@@ -170,7 +190,8 @@ class Rehearsal:
                 '-v', f'{cfg}:/etc/trino:ro', '-v', f'{material}:/run/tls:ro',
                 '-e', 'TRINO_UBI_ALLOW_INSECURE=true']
         for host in ('trino', 'catalog', 's3', 'alias'):
-            args += ['--add-host', host + ':127.0.0.1']
+            target = '127.0.0.2' if edge == 'self-worker' and host in ('trino', 'alias') else '127.0.0.1'
+            args += ['--add-host', host + ':' + target]
         if not login_exception:
             index = args.index('TRINO_UBI_ALLOW_INSECURE=true')
             del args[index - 1:index + 1]
@@ -186,7 +207,7 @@ class Rehearsal:
     def positive(self, edge):
         name = self.start(edge=edge)
         rt.ready(name, BASE, self.context)
-        if edge in ('inbound', 'internal'):
+        if edge in ('inbound', 'internal', 'self-worker'):
             assert rt.query(BASE, 'SELECT version()', self.context) == [[rt.LOCK['trino']['version']]]
             assert rt.query(BASE, 'SELECT count(*) FROM tpch.tiny.nation', self.context) == [[25]]
             assert rt.query(BASE, "SELECT count(*) FROM system.runtime.nodes WHERE state = 'active'", self.context) == [[1]]
@@ -228,6 +249,7 @@ class Rehearsal:
                 if parts[3] == '0A' and f'socket:[{parts[9]}]' in descriptors:
                     ports.add(int(parts[1].split(':')[1], 16))
         assert ports == {8443}, ports
+        self.socket_ports = sorted(ports)
 
     def inbound_negative(self, variant):
         self.start(variant)
@@ -254,7 +276,7 @@ class Rehearsal:
         if edge == 'inbound':
             return self.inbound_negative(variant)
         name = self.start(variant, edge)
-        if edge != 'internal':
+        if edge not in ('internal', 'self-worker'):
             rt.ready(name, BASE, self.context)
             try:
                 self.operation(edge)
@@ -266,16 +288,44 @@ class Rehearsal:
                 assert not (self.rest if edge == 'REST' else self.s3).observations
                 return match.group(0)
             raise AssertionError(f'{edge} accepted {variant}')
+        if edge == 'self-worker':
+            rt.ready(name, BASE, self.context)
+            try:
+                rt.query(BASE, 'SELECT count(*) FROM tpch.tiny.nation', self.context)
+            except AssertionError as error:
+                diagnostic = str(error) + rt.logs(name)
+                match = re.search(TLS_ERRORS[variant], diagnostic, re.I)
+                assert match, 'self-worker SQL failed without TLS-specific evidence'
+                return match.group(0)
+            raise AssertionError('self-worker accepted an invalid certificate')
         deadline = time.monotonic() + 90
         while time.monotonic() < deadline:
             output = rt.logs(name)
             match = re.search(TLS_ERRORS[variant], output, re.I)
-            if match and ('Announcer' in output or 'Discovery' in output):
+            origin = ('Announcer' in output or 'Discovery' in output) if edge == 'internal' else ('RemoteNodeState' in output or 'node-state' in output or 'worker-info' in output)
+            if match and origin:
                 return match.group(0)
             state = json.loads(rt.command('inspect', name).stdout)[0]['State']
             assert state['Running'], 'internal mutation caused startup failure rather than client TLS rejection'
             time.sleep(1)
         raise AssertionError('internal client has no TLS-specific rejection')
+
+    def secret_isolation(self):
+        inspected = json.loads(rt.command('inspect', self.name).stdout)[0]
+        bindings = [m for m in inspected['Mounts'] if m['Type'] == 'bind']
+        assert {m['Destination'] for m in bindings} == {'/etc/trino', '/run/tls'}
+        assert all(not m['RW'] for m in bindings)
+        assert not any(secret in str(inspected['Config']['Env']) for secret in
+                       (self.password, self.shared, self.access, self.secret))
+        for path in ('server.pem', 'internal-ca.pem', 'trust.p12', 'password'):
+            info = rt.command('exec', self.name, 'stat', '-c', '%u:%g:%a', '/run/tls/' + path).stdout.strip()
+            assert info == '0:0:440', info
+        # Same GID does not grant access to another role: only own material is mounted.
+        rt.command('exec', self.name, '/bin/bash', '-c',
+                   'test ! -r /run/tls/catalog.key && test ! -r /run/tls/s3.key && '
+                   'test ! -r /run/tls/ca.key && test ! -e /authority && '
+                   'test ! -e /run/tls/../catalog && test ! -e /run/tls/../s3')
+        record('runtime', 'secret-isolation', 'only own read-only mounts; root:0 0440; other roles and signing key inaccessible')
 
     def fail_closed(self):
         def append(text):
@@ -318,6 +368,8 @@ class Rehearsal:
     def close(self):
         self.stop()
         self.rest.close(); self.s3.close()
+        if self.relay:
+            self.relay.close()
 
 
 def main():
@@ -331,14 +383,15 @@ def main():
     try:
         rehearsal = Rehearsal(root)
         report['certificates'] = rehearsal.inventory
-        for edge in ('inbound', 'internal', 'REST', 'S3'):
+        for edge in ('internal', 'self-worker', 'REST', 'S3', 'inbound'):
+            rehearsal.positive(edge)
             for variant in ('wrong-ca', 'wrong-trust', 'wrong-san', 'other-service', 'alias', 'expired'):
-                rehearsal.positive(edge)
                 outcome = rehearsal.negative(edge, variant)
                 rehearsal.positive(edge)
                 record(edge, variant, outcome + '; valid operation before and after')
             record(edge, 'plaintext', '8080 refused; 8443 protocol rejection; IPv4/IPv6; only JVM listener 8443')
         rt.inspect_security(rehearsal.name)
+        rehearsal.secret_isolation()
         record('runtime', 'hardening', 'restricted runtime properties preserved')
         rehearsal.fail_closed()
         report['complete'] = True
@@ -346,6 +399,10 @@ def main():
         report['complete'] = False
         report['failure'] = type(error).__name__
         report['failure_detail'] = str(error) if rehearsal else 'fixture preparation failed'
+        if rehearsal and rehearsal.name:
+            diagnostic_lines = [line for line in rt.logs(rehearsal.name).splitlines()
+                                if re.search(r'ERROR|WARN|Exception|PKIX|certificate|Certificate', line)]
+            report['failure_detail'] += '\n' + '\n'.join(diagnostic_lines[-25:])
         if rehearsal:
             for secret in (rehearsal.password, rehearsal.shared, rehearsal.access, rehearsal.secret):
                 report['failure_detail'] = report['failure_detail'].replace(secret, '[REDACTED]')
