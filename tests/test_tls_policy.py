@@ -37,7 +37,11 @@ class TLSPolicyTests(unittest.TestCase):
                       'danger_accept_invalid_hostnames', 'AWS_ALLOW_INVALID_CERTIFICATES=true',
                       'proxy_ssl_verify off', 'grpc_ssl_verify off', 'sslmode=verify-ca',
                       'sslmode=require', 'sslmode=disable', 'AWS_ALLOW_HTTP=true',
-                      'TrustAll', 'NoopHostnameVerifier'):
+                      'TrustAll', 'NoopHostnameVerifier', 'curl -k https://example.invalid',
+                      'curl -fsSk https://example.invalid', 'curl "-k" https://example.invalid',
+                      'AWS_ALLOW_HTTP="true"', "AWS_ALLOW_INVALID_CERTIFICATES='true'",
+                      '"check_hostname": false', 'sslmode="require"',
+                      '"proxy_ssl_verify": "off"'):
             with self.subTest(value=value), self.assertRaises(AssertionError):
                 tls_policy.check_text(value)
 

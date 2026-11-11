@@ -5,16 +5,18 @@ from pathlib import Path
 # This file alone defines the forbidden spellings. Test vectors live only in
 # test_tls_policy.py; neither exclusion applies to runtime harness/config files.
 DENY = re.compile(
-    r'verify[\s\"\x27:=]+false|--insecure\b|curl\s+[^\n]*\s-k\b|CERT_NONE|'
+    r'verify[\s:=]+false|--insecure\b|\bcurl\b[^\n]*?\s-[a-z]*k[a-z]*\b|CERT_NONE|'
     r'check_hostname[\s:=]+false|insecure_?skip_?verify[\s\"\x27:=]+true|'
     r'danger_accept_invalid_(?:certs|hostnames)|AWS_ALLOW_INVALID_CERTIFICATES[\s:=]+true|'
-    r'(?:proxy|grpc)_ssl_verify\s+off|sslmode[\s:=]+(?:require|allow|prefer|disable|verify-ca)\b|'
+    r'(?:proxy|grpc)_ssl_verify[\s:=]+off|sslmode[\s:=]+(?:require|allow|prefer|disable|verify-ca)\b|'
     r'AWS_ALLOW_HTTP[\s:=]+true|TrustAll|NoopHostnameVerifier|setHostnameVerifier|'
     r'hostname-verification[\s:=]+false', re.I)
 
 
 def check_text(text):
-    assert not DENY.search(text), 'TLS verification downgrade detected'
+    # Quotes do not change the meaning of environment, JSON or shell options.
+    normalized = text.translate(str.maketrans('', '', '\"\x27'))
+    assert not DENY.search(normalized), 'TLS verification downgrade detected'
 
 
 def check_repository(root):
