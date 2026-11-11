@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Enforce LF line endings: `.gitattributes` normalizes text to LF, a local
+  pre-commit hook and CI reject any committed CRLF.
 ### Added
 
 - Official digest-pinned Trino 484 Iceberg plugin for operator-supplied REST
