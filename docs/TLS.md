@@ -105,3 +105,12 @@ mutated relay certificate during a TPCH query. A per-client announcer truststore
 keeps discovery valid when testing a wrong self-worker trust bundle. This fixture
 routing is solely for independent negative evidence, not an image dependency or
 a deployment proxy requirement.
+
+For internal failures the rehearsal enables Airlift 451's per-client request
+events on the data tmpfs. The inspected `HttpClientLogLayout` records method,
+URI, result/failure class and timings, not headers, bodies or certificate bytes.
+The ordinary announcer warning wraps its TLS cause as a generic communication
+error, which is insufficient evidence. Acceptance requires the originating
+announcer/scheduler request's `SSLHANDSHAKE` result (or a TLS-specific nested
+exception), plus successful real operations before and after. Only the parsed
+allowlisted result is included in the uploaded manifest.

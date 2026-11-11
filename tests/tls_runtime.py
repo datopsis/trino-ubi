@@ -178,6 +178,10 @@ class Rehearsal:
                 f's3.endpoint=https://{s3_host}:{self.s3.server_port}\ns3.region=us-east-1\n'
                 's3.path-style-access=true\ns3.max-error-retries=1\n'
                 f's3.aws-access-key={self.access}\ns3.aws-secret-key={self.secret}\n')
+        if edge in ('internal', 'self-worker'):
+            client = 'announcer' if edge == 'internal' else 'scheduler'
+            with (cfg / 'config.properties').open('a') as stream:
+                stream.write(f'{client}.http-client.log.enabled=true\n{client}.http-client.log.path=/var/lib/trino\n{client}.http-client.log.flush-interval=100ms\n')
         validate_config(cfg)
         if defect:
             defect(cfg, material)
@@ -213,7 +217,27 @@ class Rehearsal:
             assert rt.query(BASE, "SELECT count(*) FROM system.runtime.nodes WHERE state = 'active'", self.context) == [[1]]
         else:
             self.operation(edge)
+        if edge in ('internal', 'self-worker'):
+            client = 'announcer' if edge == 'internal' else 'scheduler'
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                if any(row[4].isdigit() and 200 <= int(row[4]) < 300 for row in self.client_events(client)):
+                    break
+                time.sleep(0.2)
+            else:
+                raise AssertionError(f'no successful real {client} request recorded')
         self.plaintext()
+        if edge in ('REST', 'S3'):
+            fixture = self.rest if edge == 'REST' else self.s3
+            before = len(fixture.observations)
+            try:
+                with socket.create_connection(('127.0.0.1', fixture.server_port), timeout=2) as sock:
+                    sock.sendall(b'GET / HTTP/1.1\r\nHost: fixture\r\nConnection: close\r\n\r\n')
+                    response = sock.recv(4096)
+                    assert protocol_rejection(response), 'plaintext fixture response'
+            except ConnectionResetError:
+                pass
+            assert len(fixture.observations) == before, 'plaintext reached application handler'
         return name
 
     def operation(self, edge):
@@ -229,7 +253,7 @@ class Rehearsal:
 
     def plaintext(self):
         # Both address families, legacy and effective ports; protocol errors only.
-        for host in ('127.0.0.1', '::1'):
+        for host in (('127.0.0.1', '::1', '127.0.0.2') if self.relay else ('127.0.0.1', '::1')):
             for port in (8080, 8443):
                 try:
                     with socket.create_connection((host, port), timeout=2) as sock:
@@ -272,6 +296,11 @@ class Rehearsal:
             time.sleep(1)
         raise AssertionError('no TLS-specific inbound failure')
 
+    def client_events(self, client):
+        output = rt.command('exec', self.name, 'cat', f'/var/lib/trino/{client}-http-client.log', check=False).stdout
+        rows = [line.split('\t') for line in output.splitlines()]
+        return [row for row in rows if len(row) == 12 and row[3].startswith('https://')]
+
     def negative(self, edge, variant):
         if edge == 'inbound':
             return self.inbound_negative(variant)
@@ -295,20 +324,27 @@ class Rehearsal:
             except AssertionError as error:
                 diagnostic = str(error) + rt.logs(name)
                 match = re.search(TLS_ERRORS[variant], diagnostic, re.I)
-                assert match, 'self-worker SQL failed without TLS-specific evidence'
-                return match.group(0)
+                if match:
+                    return match.group(0)
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    if any('/v1/task/' in row[3] and row[4] == 'SSLHANDSHAKE' for row in self.client_events('scheduler')):
+                        return 'scheduler /v1/task: SSLHANDSHAKE'
+                    time.sleep(0.2)
+                raise AssertionError('self-worker SQL failed without TLS-specific evidence: ' + repr(self.client_events('scheduler')))
             raise AssertionError('self-worker accepted an invalid certificate')
         deadline = time.monotonic() + 90
         while time.monotonic() < deadline:
-            output = rt.logs(name)
-            match = re.search(TLS_ERRORS[variant], output, re.I)
-            origin = ('Announcer' in output or 'Discovery' in output) if edge == 'internal' else ('RemoteNodeState' in output or 'node-state' in output or 'worker-info' in output)
-            if match and origin:
-                return match.group(0)
+            # Airlift's ordinary warning hides nested TLS causes. Its built-in
+            # request event records the originating Jetty failure class, without
+            # headers, bodies, credentials or certificate bytes (Airlift 451).
+            for row in self.client_events('announcer'):
+                if row[3].endswith('/v1/announce') and row[4] == 'SSLHANDSHAKE':
+                    return 'announcer POST /v1/announce: SSLHANDSHAKE'
             state = json.loads(rt.command('inspect', name).stdout)[0]['State']
             assert state['Running'], 'internal mutation caused startup failure rather than client TLS rejection'
             time.sleep(1)
-        raise AssertionError('internal client has no TLS-specific rejection')
+        raise AssertionError('internal client has no TLS-specific rejection: ' + repr(self.client_events('announcer')))
 
     def secret_isolation(self):
         inspected = json.loads(rt.command('inspect', self.name).stdout)[0]
@@ -384,16 +420,20 @@ def main():
         rehearsal = Rehearsal(root)
         report['certificates'] = rehearsal.inventory
         for edge in ('internal', 'self-worker', 'REST', 'S3', 'inbound'):
+            report['active_case'] = f'{edge}/initial valid control'
             rehearsal.positive(edge)
             for variant in ('wrong-ca', 'wrong-trust', 'wrong-san', 'other-service', 'alias', 'expired'):
+                report['active_case'] = f'{edge}/{variant}'
+                print('CHECK ' + report['active_case'], flush=True)
                 outcome = rehearsal.negative(edge, variant)
                 rehearsal.positive(edge)
                 record(edge, variant, outcome + '; valid operation before and after')
-            record(edge, 'plaintext', '8080 refused; 8443 protocol rejection; IPv4/IPv6; only JVM listener 8443')
+            record(edge, 'plaintext', '8080 refused; 8443 fatal TLS alert or close; IPv4/IPv6; only JVM listener 8443; exercised endpoint refused plaintext')
         rt.inspect_security(rehearsal.name)
         rehearsal.secret_isolation()
         record('runtime', 'hardening', 'restricted runtime properties preserved')
         rehearsal.fail_closed()
+        del report['active_case']
         report['complete'] = True
     except Exception as error:
         report['complete'] = False

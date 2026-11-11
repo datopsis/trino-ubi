@@ -135,15 +135,9 @@ class InternalRelay:
                     return
 
     def forward(self, connection):
+        import select
         import socket
-        def copy(source, destination):
-            try:
-                while chunk := source.recv(65536):
-                    destination.sendall(chunk)
-            except (OSError, ssl.SSLError):
-                pass
-            finally:
-                source.close(); destination.close()
+        incoming = upstream = None
         try:
             connection.settimeout(10)
             incoming = self.context.wrap_socket(connection, server_side=True)
@@ -151,11 +145,22 @@ class InternalRelay:
             context.set_alpn_protocols([incoming.selected_alpn_protocol() or 'http/1.1'])
             upstream = context.wrap_socket(socket.create_connection(('127.0.0.1', 8443), timeout=10), server_hostname='trino')
             self.connections.extend((incoming, upstream))
-            incoming.settimeout(None); upstream.settimeout(None)
-            threading.Thread(target=copy, args=(incoming, upstream), daemon=True).start()
-            copy(upstream, incoming)
-        except (OSError, ssl.SSLError):
-            connection.close()
+            # A single thread owns both SSL objects: concurrent SSL_read and
+            # SSL_write on one object can corrupt TLS 1.3 record state.
+            while not self.stopping:
+                readable, _, _ = select.select([incoming, upstream], [], [], 1)
+                for source, destination in ((incoming, upstream), (upstream, incoming)):
+                    if source in readable or source.pending():
+                        chunk = source.recv(65536)
+                        if not chunk:
+                            return
+                        destination.sendall(chunk)
+        except (OSError, ssl.SSLError, ValueError):
+            pass
+        finally:
+            for stream in (incoming, upstream, connection):
+                if stream is not None:
+                    stream.close()
 
     def close(self):
         self.stopping = True
