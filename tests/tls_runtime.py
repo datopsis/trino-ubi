@@ -90,6 +90,7 @@ class Rehearsal:
         self.inventory = prepare(self.pki)
         self.password = secrets.token_hex(24)
         self.shared = secrets.token_hex(48)
+        self.versions = {'Iceberg REST': set(), 'native S3': set()}
         self.access = secrets.token_hex(16)
         self.secret = secrets.token_hex(32)
         self.context = ssl.create_default_context(cafile=self.pki / 'ca.crt')
@@ -252,8 +253,10 @@ class Rehearsal:
         else:
             rt.query(BASE, "CALL iceberg.system.register_table(schema_name => 'tls', table_name => 'probe', table_location => 's3://bucket/table', metadata_file_name => 'v1.metadata.json')", self.context)
             assert any(method == 'GET' and path == '/bucket/table/metadata/v1.metadata.json' for method, path, _ in self.s3.observations)
-        for _, _, version in self.rest.observations + self.s3.observations:
-            assert version in ('TLSv1.2', 'TLSv1.3')
+        for label, fixture in (('Iceberg REST', self.rest), ('native S3', self.s3)):
+            for _, _, version in fixture.observations:
+                assert version in ('TLSv1.2', 'TLSv1.3')
+                self.versions[label].add(version)
 
     def plaintext(self):
         # Both address families, legacy and effective ports; protocol errors only.
@@ -446,6 +449,8 @@ def main():
         record('runtime', 'hardening', 'restricted runtime properties preserved')
         rehearsal.fail_closed()
         del report['active_case']
+        report['negotiated_tls'] = {key: sorted(value) for key, value in rehearsal.versions.items()}
+        report['negotiated_tls']['urllib SQL'] = sorted(rt.TLS_VERSIONS)
         report['complete'] = True
     except Exception as error:
         report['complete'] = False

@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LOCK = json.loads((ROOT / 'artifacts/trino.lock.json').read_text())
 RUNTIME = os.environ.get('CONTAINER_RUNTIME', 'podman')
 IMAGE = os.environ.get('IMAGE', 'localhost/trino-ubi:dev')
+TLS_VERSIONS = set()
 
 
 def command(*args, check=True, **kwargs):
@@ -56,6 +57,7 @@ def request(url, sql=None, context=None, credentials=None):
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}),
                                           urllib.request.HTTPSHandler(context=context), NoRedirect())
     with opener.open(req, timeout=10) as response:
+        TLS_VERSIONS.add(response.fp.raw._sock.version())
         return json.load(response)
 
 

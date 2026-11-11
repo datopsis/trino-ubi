@@ -7,6 +7,7 @@ import json
 import ssl
 import threading
 import uuid
+from urllib.parse import parse_qs, urlsplit
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 METADATA = {
@@ -35,17 +36,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def respond(self):
         server = self.server
-        server.observations.append((self.command, self.path.split('?')[0], self.connection.version()))
+        uri = urlsplit(self.path)
+        path = uri.path
+        server.observations.append((self.command, path, self.connection.version()))
         if server.role == 's3':
             assert self.headers.get('Authorization', '').startswith('AWS4-HMAC-SHA256 ')
             result = METADATA
-        elif '/v1/config' in self.path:
+        elif path == '/v1/config':
             result = {'defaults': {}, 'overrides': {}}
-        elif self.path.endswith('/namespaces'):
-            result = {'namespaces': [['tls']]}
-        elif self.path.endswith('/namespaces/tls'):
+        elif path.endswith('/namespaces'):
+            result = {'namespaces': [] if parse_qs(uri.query).get('parent') else [['tls']]}
+        elif path.endswith('/namespaces/tls'):
             result = {'namespace': ['tls'], 'properties': {'location': 's3://bucket/'}}
-        elif self.path.endswith('/register'):
+        elif path.endswith('/register'):
             result = {'metadata-location': 's3://bucket/table/metadata/v1.metadata.json', 'metadata': METADATA}
         else:
             self.send_error(404)
