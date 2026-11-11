@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Enforce LF line endings: `.gitattributes` normalizes text to LF, a local
+  pre-commit hook and CI reject any committed CRLF.
 ### Added
 
 - Trino 484 core plus TPCH on digest-pinned UBI 9.8 Micro, with verified Temurin
