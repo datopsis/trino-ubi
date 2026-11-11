@@ -143,7 +143,7 @@ class Rehearsal:
         (material / 'password').write_text(self.password + '\n')
         address = 'alias' if edge == 'self-worker' and variant == 'alias' else 'trino'
         (cfg / 'node.properties').write_text(
-            'node.environment=testing\nnode.id=single-node\nnode.data-dir=/var/lib/trino\n' + f'node.internal-address={address}\n')
+            'node.environment=testing\nnode.id=single-node\nnode.data-dir=/var/lib/trino\nnode.bind-ip=127.0.0.1\n' + f'node.internal-address={address}\n')
         (cfg / 'config.properties').write_text(
             'coordinator=true\nnode-scheduler.include-coordinator=true\n'
             'http-server.http.enabled=false\nhttp-server.https.enabled=true\nhttp-server.https.port=8443\n'
@@ -165,8 +165,6 @@ class Rehearsal:
             conf.write_text(conf.read_text().replace(f'discovery.uri=https://{address}:8443', 'discovery.uri=https://127.0.0.1:8443') +
                             'announcer.http-client.trust-store-path=/run/tls/discovery-ca.pem\nquery.remote-task.max-error-duration=5s\n')
             shutil.copyfile(self.pki / 'ca.crt', material / 'discovery-ca.pem')
-            with (cfg / 'node.properties').open('a') as stream:
-                stream.write('node.bind-ip=127.0.0.1\n')
         (cfg / 'truststore.properties').write_text('path=/run/tls/trust.p12\ntype=PKCS12\npassword-file=/run/tls/password\n')
         if edge in ('REST', 'S3'):
             rest_host = 'alias' if edge == 'REST' and variant == 'alias' else 'catalog'
@@ -278,6 +276,7 @@ class Rehearsal:
             for line in rt.command('exec', self.name, 'cat', '/proc/1/net/' + family).stdout.splitlines()[1:]:
                 parts = line.split()
                 if parts[3] == '0A' and f'socket:[{parts[9]}]' in descriptors:
+                    assert family == 'tcp' and parts[1].split(':')[0] == '0100007F', 'test listener must bind loopback'
                     ports.add(int(parts[1].split(':')[1], 16))
         assert ports == {8443}, ports
         self.socket_ports = sorted(ports)
