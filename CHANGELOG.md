@@ -24,7 +24,7 @@
 - Unsigned upstream Trino archives are verified by locked digest only.
 - Full authentication/TLS, multi-node and platform qualification remain pending.
 
-### Phase A TLS (qualification pending)
+### Phase A TLS
 
 - Require HTTPS even with the isolated login exception; explicit internal trust
   avoids automatic certificates. Add a narrowly guarded PKCS12 JVM trust file

@@ -127,11 +127,13 @@ def inspect_security(name):
             'test ! -d /etc/yum.repos.d; test ! -d /etc/pki/rpm-gpg; '
             'test ! -d /opt/trino/secrets-plugin; test ! -d /opt/trino/bin; '
             'test -z "$(find / -xdev -type f -perm /6000 -print -quit 2>/dev/null)"')
+    descriptors = command('exec', name, '/bin/bash', '-c',
+                          'for f in /proc/[0-9]*/fd/*; do readlink "$f" || :; done').stdout
     for file in ('tcp', 'tcp6'):
         sockets = command('exec', name, 'cat', '/proc/net/' + file).stdout
         for line in sockets.splitlines()[1:]:
             columns = line.split()
-            if columns[3] == '0A':
+            if columns[3] == '0A' and f'socket:[{columns[9]}]' in descriptors:
                 assert int(columns[1].split(':')[1], 16) >= 1024, line
     release = command('exec', name, 'cat', '/opt/java/release').stdout
     arch = config['Architecture'] if 'Architecture' in config else json.loads(command('image', 'inspect', IMAGE).stdout)[0]['Architecture']

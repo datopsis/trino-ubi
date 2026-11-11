@@ -18,10 +18,10 @@ def check_text(text):
 
 
 def check_repository(root):
-    for directory in ('container', 'tests', '.github/workflows'):
+    for directory in ('container', 'tests', 'scripts', '.github/workflows'):
         for path in (root / directory).rglob('*'):
             if path.is_file() and path.suffix in ('.py', '.sh', '.properties', '.yml', '.yaml'):
-                if path == root / 'tests/test_tls_policy.py':
+                if path in (root / 'tests/test_tls_policy.py', root / 'scripts/tls_policy.py'):
                     continue
                 check_text(path.read_text())
 

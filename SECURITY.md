@@ -19,3 +19,10 @@ UBI manifest, Temurin JRE and added Red Hat RPM signatures are verified. Preserv
 guard, read-only configuration, UID 10001, explicit writable paths, capability
 drop and no-new-privileges contract. See docs/CONFIGURATION.md for deployment
 responsibilities and the limits of the authentication guard.
+
+The isolated-test login exception requires HTTPS-only ingress and explicit
+internal trust. Operator-supplied PKCS12 JVM trust is narrowly guarded; arbitrary
+Java option overrides remain forbidden. See [the TLS profile](docs/TLS.md) for
+read-only secret mounts, per-client negative evidence and the distinction between
+client TLS qualification and production authentication/authorization. No TLS
+result waives the blocking vulnerability gate.

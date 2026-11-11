@@ -1,7 +1,8 @@
 # Phase A HTTPS isolated-test profile
 
 Implements item 5 of the [pinned lakehouse TLS plan](https://github.com/datopsis/lakehouse-integration/blob/55b8e83374375210bc06fa117c9a0954d66bd593/docs/TLS-PLAN.md).
-Qualification is pending native CI. This branch includes the plan's exact
+Native CI is the acceptance gate; [PR #3](https://github.com/datopsis/trino-ubi/pull/3)
+records the actual per-architecture results and retained evidence. This branch includes the plan's exact
 Iceberg baseline, commit `964802b7afd3ae526039ef7dc7fcf605ce3d5b26` (PR #2).
 Its known fixed High vulnerabilities remain blocking. No dependency or JAR is
 changed relative to that baseline; this is not a vulnerability exemption.
@@ -114,3 +115,21 @@ error, which is insufficient evidence. Acceptance requires the originating
 announcer/scheduler request's `SSLHANDSHAKE` result (or a TLS-specific nested
 exception), plus successful real operations before and after. Only the parsed
 allowlisted result is included in the uploaded manifest.
+
+Assuming the private Docker network `lakehouse` and operator-owned files already
+exist, start the isolated profile without publishing a host port:
+
+```sh
+docker run --rm --name trino --network lakehouse \
+  --read-only --cap-drop=ALL --security-opt=no-new-privileges \
+  --pids-limit=512 --memory=3g \
+  --tmpfs /var/lib/trino:rw,noexec,nosuid,nodev,uid=10001,gid=0,mode=0750,size=512m \
+  --tmpfs /tmp/trino:rw,exec,nosuid,nodev,uid=10001,gid=0,mode=0750,size=256m \
+  -v /absolute/operator-config:/etc/trino:ro \
+  -v /absolute/trino-tls:/run/tls:ro \
+  -e TRINO_UBI_ALLOW_INSECURE=true localhost/trino-ubi:dev
+```
+
+Clients on that network use `https://trino:8443` and the public run CA. Configure
+DNS/SANs consistently for the catalog and S3 endpoints as well. The native CI
+rehearsal uses Docker; rootless Podman remains unqualified in this sandbox.

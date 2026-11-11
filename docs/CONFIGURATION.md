@@ -98,6 +98,7 @@ configure or qualify Lakekeeper or SeaweedFS.
 
 Property names follow Trino 484's [REST catalog documentation](https://github.com/trinodb/trino/blob/484/docs/src/main/sphinx/object-storage/metastores.md#iceberg-rest-catalog)
 and [S3 documentation](https://github.com/trinodb/trino/blob/484/docs/src/main/sphinx/object-storage/file-system-s3.md).
-Only startup, connector registration and catalog creation are tested here;
-remote authentication, table reads/writes and S3 compatibility require the
-separate cross-repository lakehouse integration test.
+The [TLS rehearsal](TLS.md) additionally exercises real REST namespace requests
+and signed S3 metadata reads through SQL against protocol fixtures. Remote
+authentication, table data reads/writes and Lakekeeper/SeaweedFS compatibility
+require the separate cross-repository lakehouse integration test.

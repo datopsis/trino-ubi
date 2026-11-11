@@ -26,9 +26,9 @@ BASE = 'https://trino:8443'
 TLS_ERRORS = {
     'wrong-ca': r'PKIX path building failed|unable to find valid certification path',
     'wrong-trust': r'PKIX path building failed|unable to find valid certification path',
-    'wrong-san': r'No subject alternative (?:DNS name|names) matching|Certificate for .* doesn.t match|No name matching',
-    'other-service': r'No subject alternative (?:DNS name|names) matching|Certificate for .* doesn.t match|No name matching',
-    'alias': r'No subject alternative (?:DNS name|names) matching|Certificate for .* doesn.t match|No name matching',
+    'wrong-san': r'No subject alternative (?:DNS name|names) matching|Certificate for .*? doesn.t match|No name matching',
+    'other-service': r'No subject alternative (?:DNS name|names) matching|Certificate for .*? doesn.t match|No name matching',
+    'alias': r'No subject alternative (?:DNS name|names) matching|Certificate for .*? doesn.t match|No name matching',
     'expired': r'CertificateExpiredException|validity check failed|NotAfter:',
 }
 ORIGINAL_RESOLVE = socket.getaddrinfo
@@ -434,6 +434,13 @@ def main():
     try:
         rehearsal = Rehearsal(root)
         report['certificates'] = rehearsal.inventory
+        report['active_case'] = 'runtime/hardening'
+        rehearsal.positive('inbound')
+        rt.inspect_security(rehearsal.name)
+        rehearsal.secret_isolation()
+        record('runtime', 'hardening', 'restricted runtime properties preserved')
+        report['active_case'] = 'startup guards'
+        rehearsal.fail_closed()
         for edge in ('internal', 'self-worker', 'REST', 'S3', 'inbound'):
             report['active_case'] = f'{edge}/initial valid control'
             rehearsal.positive(edge)
@@ -444,10 +451,6 @@ def main():
                 rehearsal.positive(edge)
                 record(edge, variant, outcome + '; valid operation before and after')
             record(edge, 'plaintext', '8080 refused; 8443 fatal TLS alert or close; IPv4/IPv6; only JVM listener 8443; exercised endpoint refused plaintext')
-        rt.inspect_security(rehearsal.name)
-        rehearsal.secret_isolation()
-        record('runtime', 'hardening', 'restricted runtime properties preserved')
-        rehearsal.fail_closed()
         del report['active_case']
         report['negotiated_tls'] = {key: sorted(value) for key, value in rehearsal.versions.items()}
         report['negotiated_tls']['urllib SQL'] = sorted(rt.TLS_VERSIONS)
