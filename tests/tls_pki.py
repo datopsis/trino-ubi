@@ -47,6 +47,8 @@ def prepare(root):
             Path(str(prefix) + '.pem').write_bytes(Path(str(prefix) + '.key').read_bytes() + Path(str(prefix) + '.crt').read_bytes())
             inventory[f'{role}/{variant}'] = openssl('x509', '-in', str(prefix) + '.crt', '-noout',
                                                     '-fingerprint', '-sha256', '-dates', '-ext', 'subjectAltName').strip()
+    for role in ('trino', 'catalog', 's3'):
+        openssl('x509', '-in', root / f'{role}-valid.crt', '-checkend', '2700', '-noout')
     for issuer in ('ca', 'unrelated'):
         (root / f'{issuer}.key').unlink()
     for path in root.iterdir():

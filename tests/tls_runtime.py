@@ -118,7 +118,7 @@ class Rehearsal:
             rt.command('rm', '-f', self.name, check=False)
             self.name = None
 
-    def start(self, variant='valid', edge='inbound', defect=None, extra=(), login_exception=True, mounts=True, native_tmp=True):
+    def start(self, variant='valid', edge='inbound', defect=None, extra=(), login_exception=True, mounts=True, native_tmp=True, writable_config=False, public_key=False):
         self.stop()
         if self.relay:
             self.relay.close()
@@ -186,12 +186,16 @@ class Rehearsal:
         if defect:
             defect(cfg, material)
         protect(cfg); protect(material)
+        if writable_config:
+            subprocess.run(['sudo', 'chmod', '0666', str(cfg / 'config.properties')], check=True)
+        if public_key:
+            subprocess.run(['sudo', 'chmod', '0444', str(material / 'server.pem')], check=True)
         self.name = 'trino-tls-' + secrets.token_hex(6)
         args = ['run', '-d', '--name', self.name, '--read-only', '--cap-drop=ALL',
                 '--security-opt=no-new-privileges', '--pids-limit=512', '--memory=3g', '--network=host',
                 '--tmpfs', '/tmp/trino:rw,exec,nosuid,nodev,uid=10001,gid=0,mode=0750,size=256m',
                 '--tmpfs', '/var/lib/trino:rw,noexec,nosuid,nodev,uid=10001,gid=0,mode=0750,size=512m',
-                '-v', f'{cfg}:/etc/trino:ro', '-v', f'{material}:/run/tls:ro',
+                '-v', f'{cfg}:/etc/trino:' + ('rw' if writable_config else 'ro'), '-v', f'{material}:/run/tls:ro',
                 '-e', 'TRINO_UBI_ALLOW_INSECURE=true']
         for host in ('trino', 'catalog', 's3', 'alias'):
             target = '127.0.0.2' if edge == 'self-worker' and host in ('trino', 'alias') else '127.0.0.1'
@@ -371,6 +375,10 @@ class Rehearsal:
             return mutate
         cases = [
             ('authentication required', {'login_exception': False}),
+            ('config.properties', {'defect': lambda cfg, _material: (cfg / 'config.properties').unlink()}),
+            ('configuration must be read-only', {'writable_config': True}),
+            ('must not be world-accessible', {'public_key': True}),
+            ('isolated HTTPS tests require truststore.properties', {'defect': lambda cfg, _material: (cfg / 'truststore.properties').unlink()}),
             ('/var/lib/trino', {'mounts': False}),
             ('/tmp/trino', {'native_tmp': False}),
             ('refusing root', {'extra': ['--user', '0:0']}),
@@ -385,6 +393,10 @@ class Rehearsal:
         for filename in ('server.pem', 'internal-ca.pem', 'trust.p12', 'password'):
             cases.append(('secret file', {'defect': lambda _cfg, material, f=filename: (material / f).unlink()}))
         cases.append(('invalid PKCS12', {'defect': lambda _cfg, material: (material / 'trust.p12').write_text('malformed')}))
+        cases.append(('invalid PKCS12', {'defect': lambda _cfg, material: (material / 'password').write_text(secrets.token_hex(24))}))
+        for filename in ('server.pem', 'internal-ca.pem'):
+            cases.append((filename, {'defect': lambda _cfg, material, f=filename: (material / f).write_text('malformed')}))
+        cases.append(('HTTPS enabled and HTTP disabled', {'defect': lambda cfg, _material: (cfg / 'config.properties').write_text((cfg / 'config.properties').read_text().replace('http-server.http.enabled=false', 'http-server.http.enabled=true'))}))
         cases.append(('requires only path', {'defect': lambda cfg, _material: (cfg / 'truststore.properties').write_text('path=/run/tls/trust.p12\ntype=PKCS12\npassword-file=/run/tls/password\nextra=-version\n')}))
         for diagnostic, options in cases:
             name = self.start(**options)
