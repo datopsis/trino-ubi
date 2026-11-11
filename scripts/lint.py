@@ -10,6 +10,7 @@ from pathlib import Path
 import yaml
 
 from artifacts import validate
+from tls_policy import check_repository
 
 root = Path(__file__).resolve().parents[1]
 files = subprocess.check_output(['git', 'ls-files', '--cached', '--others', '--exclude-standard'], text=True).splitlines()
@@ -47,4 +48,5 @@ for base in lock['bases'].values():
     assert base['reference'] in containerfile, 'Containerfile base default differs from lock'
 assert 'USER 10001:0' in containerfile and 'VOLUME ' not in containerfile
 assert 'filelock==4.2.9' in (root / '.github/requirements/pre-commit.in').read_text()
+check_repository(root)
 print('Repository lint passed')

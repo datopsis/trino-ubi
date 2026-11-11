@@ -105,7 +105,7 @@ class Rehearsal:
             rt.command('rm', '-f', self.name, check=False)
             self.name = None
 
-    def start(self, variant='valid', edge='inbound', defect=None):
+    def start(self, variant='valid', edge='inbound', defect=None, extra=(), login_exception=True, mounts=True, native_tmp=True):
         self.stop()
         self.rest.select(variant if edge == 'REST' and variant not in ('alias', 'wrong-trust') else 'valid')
         self.s3.select(variant if edge == 'S3' and variant not in ('alias', 'wrong-trust') else 'valid')
@@ -159,7 +159,16 @@ class Rehearsal:
                 '-e', 'TRINO_UBI_ALLOW_INSECURE=true']
         for host in ('trino', 'catalog', 's3', 'alias'):
             args += ['--add-host', host + ':127.0.0.1']
-        rt.command(*args, rt.IMAGE)
+        if not login_exception:
+            index = args.index('TRINO_UBI_ALLOW_INSECURE=true')
+            del args[index - 1:index + 1]
+        if not mounts:
+            index = args.index('/var/lib/trino:rw,noexec,nosuid,nodev,uid=10001,gid=0,mode=0750,size=512m')
+            del args[index - 1:index + 1]
+        if not native_tmp:
+            index = args.index('/tmp/trino:rw,exec,nosuid,nodev,uid=10001,gid=0,mode=0750,size=256m')
+            del args[index - 1:index + 1]
+        rt.command(*args, *extra, rt.IMAGE)
         return self.name
 
     def positive(self, edge):
@@ -256,6 +265,44 @@ class Rehearsal:
             time.sleep(1)
         raise AssertionError('internal client has no TLS-specific rejection')
 
+    def fail_closed(self):
+        def append(text):
+            def mutate(cfg, _material):
+                with (cfg / 'config.properties').open('a') as stream:
+                    stream.write(text)
+            return mutate
+        cases = [
+            ('authentication required', {'login_exception': False}),
+            ('/var/lib/trino', {'mounts': False}),
+            ('/tmp/trino', {'native_tmp': False}),
+            ('refusing root', {'extra': ['--user', '0:0']}),
+            ('must be true or false', {'extra': ['-e', 'TRINO_UBI_ALLOW_INSECURE=yes']}),
+            ('unprivileged port', {'defect': append('http-server.http.port=443\n')}),
+            ('duplicate property', {'defect': append('http-server.https.port=8443\n')}),
+            ('unsupported escape', {'defect': append('test=bad\\escape\n')}),
+            ('not-a-trino-property', {'defect': append('not-a-trino-property=true\n')}),
+        ]
+        for variable in ('JAVA_TOOL_OPTIONS', 'JDK_JAVA_OPTIONS', '_JAVA_OPTIONS'):
+            cases.append(('Java option environment overrides', {'extra': ['-e', variable + '=-version']}))
+        for filename in ('server.pem', 'internal-ca.pem', 'trust.p12', 'password'):
+            cases.append(('secret file', {'defect': lambda _cfg, material, f=filename: (material / f).unlink()}))
+        cases.append(('invalid PKCS12', {'defect': lambda _cfg, material: (material / 'trust.p12').write_text('malformed')}))
+        cases.append(('requires only path', {'defect': lambda cfg, _material: (cfg / 'truststore.properties').write_text('path=/run/tls/trust.p12\ntype=PKCS12\npassword-file=/run/tls/password\nextra=-version\n')}))
+        for diagnostic, options in cases:
+            name = self.start(**options)
+            rt.wait_exit(name, diagnostic)
+            for port in (8080, 8443):
+                try:
+                    with socket.create_connection(('127.0.0.1', port), timeout=2):
+                        raise AssertionError('failed startup left a listener')
+                except ConnectionRefusedError:
+                    pass
+            record('guard', diagnostic, 'nonzero startup exit and no HTTP/HTTPS fallback')
+        name = self.positive('internal')
+        rt.command('stop', '--time', '30', name)
+        assert json.loads(rt.command('inspect', name).stdout)[0]['State']['ExitCode'] in (0, 143)
+        record('runtime', 'shutdown', 'SIGTERM without SIGKILL')
+
     def close(self):
         self.stop()
         self.rest.close(); self.s3.close()
@@ -281,10 +328,15 @@ def main():
             record(edge, 'plaintext', '8080 refused; 8443 protocol rejection; IPv4/IPv6; only JVM listener 8443')
         rt.inspect_security(rehearsal.name)
         record('runtime', 'hardening', 'restricted runtime properties preserved')
+        rehearsal.fail_closed()
         report['complete'] = True
     except Exception as error:
         report['complete'] = False
         report['failure'] = type(error).__name__
+        report['failure_detail'] = str(error)[:3000] if rehearsal else 'fixture preparation failed'
+        if rehearsal:
+            for secret in (rehearsal.password, rehearsal.shared, rehearsal.access, rehearsal.secret):
+                report['failure_detail'] = report['failure_detail'].replace(secret, '[REDACTED]')
         # Raw diagnostics are runner-local, never part of an uploaded report.
         diagnostics = ROOT / '.runtime/diagnostics'
         diagnostics.mkdir(exist_ok=True, mode=0o700)
