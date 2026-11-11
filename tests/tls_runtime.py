@@ -8,6 +8,7 @@ import shutil
 import socket
 import ssl
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -18,6 +19,8 @@ from tls_endpoint import Endpoint
 from tls_pki import cleanup, prepare, protect
 
 ROOT = rt.ROOT
+sys.path.insert(0, str(ROOT / 'scripts'))
+from tls_policy import check_text
 RESULTS = []
 BASE = 'https://trino:8443'
 TLS_ERRORS = {
@@ -54,6 +57,8 @@ def properties(path):
 
 def validate_config(cfg):
     """Parse rendered settings, not just a substring check of templates."""
+    for path in cfg.rglob('*.properties'):
+        check_text(path.read_text())
     conf = properties(cfg / 'config.properties')
     assert conf['http-server.http.enabled'] == 'false'
     assert conf['http-server.https.enabled'] == 'true'
@@ -202,7 +207,7 @@ class Rehearsal:
                     with socket.create_connection((host, port), timeout=2) as sock:
                         sock.sendall(b'GET /v1/info HTTP/1.1\r\nHost: trino\r\nConnection: close\r\n\r\n')
                         response = sock.recv(4096)
-                    assert port == 8443 and (not response or response.startswith(b'HTTP/1.1 400')), 'plaintext application response'
+                    assert port == 8443 and (not response or response.startswith(b'HTTP/1.1 400')), f'plaintext response on {host}:{port}: {response[:160]!r}'
                     assert b'nodeVersion' not in response and b'Location:' not in response
                 except (ConnectionRefusedError, ConnectionResetError):
                     pass
@@ -333,10 +338,11 @@ def main():
     except Exception as error:
         report['complete'] = False
         report['failure'] = type(error).__name__
-        report['failure_detail'] = str(error)[:3000] if rehearsal else 'fixture preparation failed'
+        report['failure_detail'] = str(error) if rehearsal else 'fixture preparation failed'
         if rehearsal:
             for secret in (rehearsal.password, rehearsal.shared, rehearsal.access, rehearsal.secret):
                 report['failure_detail'] = report['failure_detail'].replace(secret, '[REDACTED]')
+            report['failure_detail'] = report['failure_detail'][:3000]
         # Raw diagnostics are runner-local, never part of an uploaded report.
         diagnostics = ROOT / '.runtime/diagnostics'
         diagnostics.mkdir(exist_ok=True, mode=0o700)

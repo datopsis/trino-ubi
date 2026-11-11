@@ -52,7 +52,7 @@ COPY --chmod=0444 LICENSE THIRD_PARTY_NOTICES.md /usr/share/licenses/trino-ubi/
 ENV LANG=C.UTF-8 TZ=UTC JAVA_HOME=/opt/java PATH="/opt/java/bin:/usr/bin:/bin"
 USER 10001:0
 WORKDIR /opt/trino
-EXPOSE 8080 8443
+EXPOSE 8443
 STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=30s --timeout=3s --start-period=120s --retries=3 CMD ["/usr/local/bin/trino-healthcheck"]
 ENTRYPOINT ["/usr/local/bin/trino-entrypoint"]

@@ -1,6 +1,5 @@
 """Per-invocation RSA PKI. No key, password or raw command output is evidence."""
 import datetime as dt
-import os
 import secrets
 import subprocess
 from pathlib import Path

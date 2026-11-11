@@ -23,3 +23,12 @@
 - No publishing, signing, release version, tag or production support claim.
 - Unsigned upstream Trino archives are verified by locked digest only.
 - Full authentication/TLS, multi-node and platform qualification remain pending.
+
+### Phase A TLS (qualification pending)
+
+- Require HTTPS even with the isolated login exception; explicit internal trust
+  avoids automatic certificates. Add a narrowly guarded PKCS12 JVM trust file
+  for Iceberg REST and native S3, keeping general JVM overrides forbidden.
+- Add per-run certificate fixtures, client-specific native negative tests,
+  parsed runtime policy checks and a static verification-downgrade deny scan.
+- Preserve upstream dependencies, hardened execution and blocking scan gates.

@@ -2,7 +2,6 @@
 """Shared restricted-container helpers for native TLS qualification."""
 import json
 import os
-import secrets
 import shutil
 import subprocess
 import time
@@ -15,27 +14,10 @@ ROOT = Path(__file__).resolve().parents[1]
 LOCK = json.loads((ROOT / 'artifacts/trino.lock.json').read_text())
 RUNTIME = os.environ.get('CONTAINER_RUNTIME', 'podman')
 IMAGE = os.environ.get('IMAGE', 'localhost/trino-ubi:dev')
-CONTAINERS = []
 
 
 def command(*args, check=True, **kwargs):
     return subprocess.run([RUNTIME, *args], check=check, text=True, capture_output=True, **kwargs)
-
-
-def start(extra=(), mounts=True, insecure=False, port=8080, native_tmp=True, env=None):
-    name = 'trino-test-' + secrets.token_hex(6)
-    args = ['run', '-d', '--name', name, '--read-only', '--cap-drop=ALL',
-            '--security-opt=no-new-privileges', '--pids-limit=512', '--memory=3g',
-            '-p', f'127.0.0.1::{port}']
-    if native_tmp:
-        args += ['--tmpfs', '/tmp/trino:rw,exec,nosuid,nodev,uid=10001,gid=0,mode=0750,size=256m']
-    if mounts:
-        args += ['--tmpfs', '/var/lib/trino:rw,noexec,nosuid,nodev,uid=10001,gid=0,mode=0750,size=512m']
-    if insecure:
-        args += ['-e', 'TRINO_UBI_ALLOW_INSECURE=true']
-    CONTAINERS.append(name)
-    command(*args, *extra, IMAGE, env=env)
-    return name
 
 
 def logs(name):
@@ -55,11 +37,6 @@ def wait_exit(name, diagnostic, timeout=120):
             return
         time.sleep(1)
     raise AssertionError(f'expected failure {diagnostic!r}; still running: {logs(name)}')
-
-
-def endpoint(name, port, secure=False):
-    address = command('port', name, str(port)).stdout.strip().splitlines()[0]
-    return ('https://' if secure else 'http://') + address
 
 
 def request(url, sql=None, context=None, credentials=None):
@@ -82,7 +59,7 @@ def ready(name, base, context=None):
             info = request(base + '/v1/info', context=context)
             if not info['starting']:
                 assert info['nodeVersion']['version'] == LOCK['trino']['version']
-                print('PASS HTTP readiness and locked server version', flush=True)
+                print('PASS HTTPS readiness and locked server version', flush=True)
                 return
         except (OSError, ValueError):
             pass
