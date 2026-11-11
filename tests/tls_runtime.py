@@ -44,6 +44,13 @@ def record(edge, case, outcome):
     print(f'PASS {edge}: {case}: {outcome}', flush=True)
 
 
+def protocol_rejection(response):
+    # A TLS fatal alert is the TLS equivalent of HTTP 400, not application data.
+    return (not response or response.startswith(b'HTTP/1.1 400 ') or
+            response.startswith(b'HTTP/1.0 400 ') or
+            (len(response) == 7 and response[:2] == b'\x15\x03' and response[3:6] == b'\x00\x02\x02'))
+
+
 def properties(path):
     result = {}
     for line in path.read_text().splitlines():
@@ -207,7 +214,7 @@ class Rehearsal:
                     with socket.create_connection((host, port), timeout=2) as sock:
                         sock.sendall(b'GET /v1/info HTTP/1.1\r\nHost: trino\r\nConnection: close\r\n\r\n')
                         response = sock.recv(4096)
-                    assert port == 8443 and (not response or response.startswith(b'HTTP/1.1 400')), f'plaintext response on {host}:{port}: {response[:160]!r}'
+                    assert port == 8443 and protocol_rejection(response), f'plaintext response on {host}:{port}: {response[:160]!r}'
                     assert b'nodeVersion' not in response and b'Location:' not in response
                 except (ConnectionRefusedError, ConnectionResetError):
                     pass

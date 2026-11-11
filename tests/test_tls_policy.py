@@ -7,12 +7,20 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tests'))
 sys.path.insert(0, str(ROOT / 'scripts'))
 import tls_policy
-from tls_runtime import properties, validate_config
+from tls_runtime import properties, protocol_rejection, validate_config
 
 
 class TLSPolicyTests(unittest.TestCase):
     def test_executable_sources_have_no_verification_downgrades(self):
         tls_policy.check_repository(ROOT)
+
+    def test_plaintext_protocol_rejection(self):
+        self.assertTrue(protocol_rejection(bytes.fromhex('15030300020250')))
+        self.assertTrue(protocol_rejection(b'HTTP/1.1 400 Bad Request'))
+        self.assertFalse(protocol_rejection(b'HTTP/1.1 200 OK'))
+        self.assertFalse(protocol_rejection(b'HTTP/1.1 302 Found'))
+        self.assertFalse(protocol_rejection(b'HTTP/1.1 403 Forbidden'))
+        self.assertFalse(protocol_rejection(bytes.fromhex('17030300020250')))
 
     def test_deny_variants(self):
         for value in ('verify=False', 'verify: false', 'VERIFY="false"', '--insecure', 'curl x -k',
