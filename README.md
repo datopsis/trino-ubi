@@ -53,18 +53,10 @@ fails; do not manufacture a manifest from unreviewed files.
 
 ## Isolated single-node test
 
-The bundled configuration follows upstream's supported coordinator-plus-worker
-single-node topology. **Startup refuses its unauthenticated configuration by
-default.** Only for an isolated local test, opt out explicitly:
-
-```sh
-podman run --rm --name trino-test --read-only --cap-drop=ALL \
-  --security-opt=no-new-privileges --pids-limit=512 --memory=3g \
-  --tmpfs /var/lib/trino:rw,noexec,nosuid,nodev,uid=10001,gid=0,mode=0750,size=512m \
-  --tmpfs /tmp/trino:rw,exec,nosuid,nodev,uid=10001,gid=0,mode=0750,size=256m \
-  -e TRINO_UBI_ALLOW_INSECURE=true -p 127.0.0.1:8080:8080 \
-  localhost/trino-ubi:dev
-```
+The bundled configuration refuses startup until the operator supplies TLS and
+credentials. For the isolated integration test, follow the [HTTPS profile](docs/TLS.md).
+`TRINO_UBI_ALLOW_INSECURE=true` waives login only; it no longer permits plaintext.
+All certificates, keys and truststores are operator-supplied read-only mounts.
 
 The test suite sends real HTTP requests and executes `SELECT version()`,
 `SELECT count(*) FROM tpch.tiny.nation` (25 rows), and a query for one active
@@ -79,7 +71,7 @@ catalog under the same restrictions; this proves startup, not remote queries.
 | Item | Contract |
 | --- | --- |
 | Identity | UID 10001, GID 0; no root startup or privilege transition |
-| Listeners | 8080 HTTP only with explicit insecure opt-out; 8443 HTTPS for guarded mode |
+| Listeners | 8443 HTTPS only; old HTTP port 8080 disabled |
 | Writable data | `/var/lib/trino`, owned by UID 10001; mount explicitly |
 | Writable native-library temp | `/tmp/trino`, owned by UID 10001; **exec required** by Trino native libraries, with nosuid/nodev |
 | Configuration | `/etc/trino`, mounted read-only for operator configuration |

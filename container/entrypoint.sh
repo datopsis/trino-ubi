@@ -60,21 +60,46 @@ secret_file() {
     mode=$(stat -c '%a' "$file")
     (( (8#$mode & 7) == 0 )) || fail "secret file must not be world-accessible: $file"
 }
+# The isolated-test exception waives login only; transport never falls back.
+[[ ${config[http-server.http.enabled]:-} == false && ${config[http-server.https.enabled]:-} == true ]] || fail 'HTTPS enabled and HTTP disabled are required'
+[[ ${config[http-server.https.port]:-} == 8443 ]] || fail 'HTTPS port 8443 is required'
+[[ ${config[http-server.authentication.allow-insecure-over-http]:-false} == false ]] || fail 'insecure HTTP authentication is forbidden'
+[[ ${config[internal-communication.https.required]:-} == true ]] || fail 'internal-communication.https.required=true is required'
+[[ -n ${config[internal-communication.shared-secret]:-} ]] || fail 'internal-communication.shared-secret is required in read-only configuration'
+[[ ${config[discovery.uri]:-} == https://* ]] || fail 'HTTPS discovery.uri is required'
+secret_file /etc/trino/config.properties
+secret_file "${config[http-server.https.keystore.path]:-missing-keystore}"
+secret_file "${config[internal-communication.https.keystore.path]:-missing-internal-keystore}"
+secret_file "${config[internal-communication.https.truststore.path]:-missing-internal-truststore}"
+[[ -n ${node[node.internal-address]:-} ]] || fail 'explicit node.internal-address is required'
+
+# An image-owned file, never forwarded to Trino's config parser. Exactly three
+# supported fields; no free-form JVM options or secret environment overrides.
+trust_options=()
+if [[ -e /etc/trino/truststore.properties ]]; then
+    declare -A trust
+    secret_file /etc/trino/truststore.properties
+    read_properties /etc/trino/truststore.properties trust
+    [[ ${#trust[@]} == 3 && -v trust[path] && -v trust[type] && -v trust[password-file] ]] || fail 'truststore.properties requires only path, type and password-file'
+    [[ ${trust[type]} == PKCS12 ]] || fail 'truststore type must be PKCS12'
+    secret_file "${trust[path]}"
+    secret_file "${trust[password-file]}"
+    trust_password=$(cat "${trust[password-file]}")
+    [[ $trust_password =~ ^[a-zA-Z0-9]{16,128}$ ]] || fail 'truststore password must be 16-128 alphanumeric characters'
+    /opt/java/bin/keytool -list -storetype PKCS12 -keystore "${trust[path]}" \
+        -storepass:file "${trust[password-file]}" >/dev/null 2>&1 || fail 'invalid PKCS12 truststore or password'
+    trust_options+=("-Djavax.net.ssl.trustStore=${trust[path]}"
+                    "-Djavax.net.ssl.trustStoreType=PKCS12"
+                    "-Djavax.net.ssl.trustStorePassword=$trust_password")
+fi
 if [[ ${TRINO_UBI_ALLOW_INSECURE:-false} != true ]]; then
     [[ ${config[http-server.authentication.type]:-} == PASSWORD ]] || fail 'authentication required: configure PASSWORD with TLS, or explicitly set TRINO_UBI_ALLOW_INSECURE=true for isolated tests'
-    [[ ${config[http-server.http.enabled]:-} == false && ${config[http-server.https.enabled]:-} == true ]] || fail 'authenticated mode requires HTTPS enabled and HTTP disabled'
-    [[ ${config[http-server.https.port]:-} == 8443 ]] || fail 'authenticated mode requires HTTPS port 8443'
-    [[ ${config[http-server.authentication.allow-insecure-over-http]:-false} == false ]] || fail 'insecure HTTP authentication is forbidden'
-    [[ ${config[internal-communication.https.required]:-} == true ]] || fail 'internal-communication.https.required=true is required'
-    [[ -n ${config[internal-communication.shared-secret]:-} ]] || fail 'internal-communication.shared-secret is required in read-only configuration'
-    [[ ${config[discovery.uri]:-} == https://* ]] || fail 'authenticated mode requires HTTPS discovery.uri'
-    secret_file /etc/trino/config.properties
-    secret_file "${config[http-server.https.keystore.path]:-missing-keystore}"
     read_properties /etc/trino/password-authenticator.properties auth
     [[ ${auth[password-authenticator.name]:-} == file ]] || fail 'first increment supports the file password authenticator'
     secret_file "${auth[file.password-file]:-missing-password-file}"
 else
-    printf 'WARNING: explicit insecure test mode; authentication and TLS are deployment responsibilities. Do not expose this listener.\n' >&2
+    [[ ${#trust_options[@]} == 3 ]] || fail 'isolated HTTPS tests require truststore.properties'
+    printf 'WARNING: isolated HTTPS test mode waives login; network isolation and authorization remain operator responsibilities.\n' >&2
 fi
 # Match upstream foreground launcher properties without shipping daemon launchers.
 # Java is PID 1, inherits the non-root identity, and receives SIGTERM directly.
@@ -87,6 +112,6 @@ exec /opt/java/bin/java -server "-Xmx$heap" \
     -Djava.io.tmpdir=/tmp/trino -Duser.home=/var/lib/trino \
     --enable-native-access=ALL-UNNAMED --add-modules=jdk.incubator.vector \
     --sun-misc-unsafe-memory-access=allow \
-    "${node_options[@]}" -Dconfig=/etc/trino/config.properties \
+    "${trust_options[@]}" "${node_options[@]}" -Dconfig=/etc/trino/config.properties \
     -Dlog.levels-file=/etc/trino/log.properties -Dlog.enable-console=true \
     -cp '/opt/trino/lib/*' io.trino.server.TrinoServer
