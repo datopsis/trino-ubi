@@ -5,6 +5,9 @@ child manifests and their Red Hat signatures, upstream core/TPCH/Iceberg archive
 Temurin JREs and detached signatures,
 public verification keys, added RPMs, and each extracted bundle manifest.
 The canonical build consumes this committed lock; only refresh resolves versions.
+RPM resolution and vulnerability admission share `artifacts/ubi.repo` and the
+checksum-verified UBI metadata reader. Only UBI 9 BaseOS is configured for both
+architectures; native admission compares EVRs with the system `python3-rpm` bindings.
 
 ## Trino
 

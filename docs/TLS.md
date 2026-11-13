@@ -4,8 +4,10 @@ Implements item 5 of the [pinned lakehouse TLS plan](https://github.com/datopsis
 Native CI is the acceptance gate; [PR #3](https://github.com/datopsis/trino-ubi/pull/3)
 records the actual per-architecture results and retained evidence. This branch includes the plan's exact
 Iceberg baseline, commit `964802b7afd3ae526039ef7dc7fcf605ce3d5b26` (PR #2).
-Its known fixed High vulnerabilities remain blocking. No dependency or JAR is
-changed relative to that baseline; this is not a vulnerability exemption.
+Its known fixed High vulnerabilities remain blocking. Trino, JRE and JAR pins
+are unchanged relative to that baseline. The separately reviewed
+[main PR #5](https://github.com/datopsis/trino-ubi/pull/5) supplies the libstdc++
+pin update and UBI-installable fix policy; no TLS-specific exemption is added.
 
 `TRINO_UBI_ALLOW_INSECURE=true` now waives authentication only. It requires
 HTTPS-only ingress on 8443, HTTPS discovery, explicit internal keystore and
