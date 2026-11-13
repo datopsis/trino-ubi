@@ -38,8 +38,16 @@ for filename in files:
         assert 'tags:' not in text and 'conformance.yml' not in text
         for use in re.findall(r'uses:\s*(\S+)', text):
             assert re.fullmatch(r'[^@]+@[a-f0-9]{40}', use), f'unpinned action: {use}'
-        for job in workflow['jobs'].values():
-            assert 'permissions' not in job and 'continue-on-error' not in str(job)
+        for name, job in workflow['jobs'].items():
+            assert 'continue-on-error' not in str(job)
+            if filename == '.github/workflows/ci.yml' and name == 'deferred-tracker':
+                assert job['permissions'] == {'contents': 'read', 'issues': 'write'}
+                assert "github.ref == 'refs/heads/main'" in job['if']
+                assert "github.event_name == 'schedule'" in job['if']
+                assert "github.event_name == 'workflow_dispatch'" in job['if']
+                assert set(job['needs']) == {'lint', 'native'}
+            else:
+                assert 'permissions' not in job
 lock = json.loads((root / 'artifacts/trino.lock.json').read_text())
 validate(lock)
 containerfile = (root / 'Containerfile').read_text()

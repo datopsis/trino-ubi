@@ -112,8 +112,11 @@ product; `.github/requirements/` contains complete hash-pinned CI requirements;
 `.github/workflows/` runs lint, native builds/runtime, SBOM and blocking scans.
 
 Both scanners report all severities, including unfixed findings. A separate,
-tested gate fails for **any fixed High/Critical finding from either scanner**;
-missing or malformed reports also fail. There are no vulnerability suppressions.
+tested gate blocks **fixable High/Critical findings from either scanner**. Only
+RPM fixes proven absent from the build's UBI repositories are deferred, with vendor
+fix versions in the job summary and a scheduled tracking issue. Fixed non-RPM
+findings, query errors and missing/malformed reports block. See [SECURITY.md](SECURITY.md).
+There are no vulnerability suppressions.
 Reports and SPDX SBOMs are retained for 14 days even when the gate fails.
 `update-locks.yml` has read-only permissions and uploads candidates and a diff
 for review; it cannot commit or open a PR. No workflow publishes or signs an
