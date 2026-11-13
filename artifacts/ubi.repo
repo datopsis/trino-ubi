@@ -1,0 +1,6 @@
+# The acquisition resolver and vulnerability gate use only this repository.
+# RPM publisher signatures are verified during acquisition before offline assembly.
+[baseos]
+baseurl=https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/$basearch/baseos/os/
+enabled=1
+gpgcheck=1

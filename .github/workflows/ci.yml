@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '23 */6 * * *'
 permissions:
   contents: read
 defaults:
@@ -27,6 +29,10 @@ jobs:
       - name: Install complete hash-locked tooling
         run: >-
           python -m pip install --require-hashes --only-binary=:all: -r .github/requirements/pre-commit.txt
+      - name: Install system RPM comparison bindings
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y python3-rpm
       - name: Install hash-locked ShellCheck
         run: |
           python3 scripts/tools.py
@@ -63,7 +69,7 @@ jobs:
         run: |
           test "$(uname -m)" = "$EXPECTED_MACHINE"
           sudo apt-get update -qq
-          sudo apt-get install -y rpm gnupg
+          sudo apt-get install -y rpm gnupg python3-rpm
       - name: Acquire verified inputs and assemble offline
         id: build
         run: bash scripts/build.sh "$ARCHITECTURE"
@@ -136,3 +142,29 @@ jobs:
           path: reports/
           if-no-files-found: error
           retention-days: 14
+  deferred-tracker:
+    name: Track deferred UBI fixes
+    needs: [lint, native]
+    if: >-
+      ${{ !cancelled() && github.ref == 'refs/heads/main' &&
+          (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: evidence-*
+          path: reports
+      - name: Update the single deferred-fix issue only when its set changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          export CI_JOB_RESULTS="$(python3 -c 'import json,os; print(json.dumps({k:v["result"] for k,v in json.loads(os.environ["CI_JOB_RESULTS"]).items()}))')"
+          python3 scripts/track_vulnerabilities.py reports

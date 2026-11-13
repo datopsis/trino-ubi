@@ -20,9 +20,11 @@ commands and the ordered remaining work in docs/ROADMAP.md.
   documented and tested; never silently enable it.
 - No FIPS, STIG, Kubernetes, OpenShift or other platform-support claims without
   matching evidence. The executable native-library temp path is explicit.
-- Trivy AND Grype block fixed High/Critical findings on both native architectures.
-  Never suppress a finding or weaken a gate to get green. Unfixed findings are
-  retained and reported. Missing scanner evidence fails closed.
+- Trivy AND Grype block fixed High/Critical findings on both native architectures
+  under the owner-approved UBI-installable fix policy in SECURITY.md. Only RPM
+  fixes proven absent from the build repositories may be deferred and reported.
+  Fixed non-RPM findings and all query/evidence errors block. Never suppress a
+  finding or add exemptions to get green; unfixed findings remain reported.
 - Retain upstream notices. Trino is Apache-2.0, Temurin is GPLv2 with Classpath
   Exception; additional bundled components retain their own licences.
 
@@ -35,7 +37,8 @@ including their .in source and transitive dependencies. Refresh locks only into
 reviewable candidate output; never create human review/sign-off records.
 
 The first increment has no release publication/signing workflow and creates no
-tag or image version. Do not change GitHub settings, secrets or permissions.
+tag or image version. Do not change GitHub settings or secrets. The trusted-main deferred tracker alone
+may have issues: write; all other workflow permissions remain read-only.
 `datopsis/container-hardening` is a draft reference only: no dependency, pinned
 commit, conformance workflow call or release-eligible gating.
 

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Apply the owner-approved UBI-installable fix gate: RPM fixes available in the
+  build's architecture-specific repositories block; proven unavailable fixes
+  remain visible as deferred. Non-RPM fixes and query/evidence errors still block.
+- Share UBI BaseOS configuration and verified metadata between lock resolution
+  and vulnerability admission; compare RPM epochs, versions and releases with librpm.
+- Add six-hour native rechecks and one trusted-main tracking issue, commenting
+  only when the deferred set changes; preserve all required CI job names.
+- Refresh RPM inputs and verified bundle hashes for amd64 and arm64; update
+  libstdc++ from 11.5.0-14.el9 to UBI-published 11.5.0-17.el9_9.
+
 - Enforce LF line endings: `.gitattributes` normalizes text to LF, a local
   pre-commit hook and CI reject any committed CRLF.
 ### Added
