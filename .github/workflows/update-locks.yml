@@ -5,6 +5,7 @@ on:
     paths:
       - artifacts/**
       - scripts/artifacts.py
+      - scripts/ubi_repos.py
       - Containerfile
       - .github/requirements/**
       - .github/workflows/update-locks.yml

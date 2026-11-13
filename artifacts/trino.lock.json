@@ -122,12 +122,12 @@
         {
           "name": "libstdc++",
           "architecture": "x86_64",
-          "nevra": "libstdc++-0:11.5.0-14.el9.x86_64",
-          "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/l/libstdc++-11.5.0-14.el9.x86_64.rpm",
-          "filename": "libstdc++-11.5.0-14.el9.x86_64.rpm",
-          "sha256": "513df35338962e053052b9d52429e8a5f3d60dfe6b1757cd9faaf61d6abda955",
-          "size": 763021,
-          "source_rpm": "gcc-11.5.0-14.el9.src.rpm"
+          "nevra": "libstdc++-0:11.5.0-17.el9_9.x86_64",
+          "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/l/libstdc++-11.5.0-17.el9_9.x86_64.rpm",
+          "filename": "libstdc++-11.5.0-17.el9_9.x86_64.rpm",
+          "sha256": "9948c922de801f3942efba461793656fbfdf3357786222c348735514536236ce",
+          "size": 765364,
+          "source_rpm": "gcc-11.5.0-17.el9_9.src.rpm"
         },
         {
           "name": "zlib",
@@ -140,7 +140,7 @@
           "source_rpm": "zlib-1.2.11-40.el9.src.rpm"
         }
       ],
-      "bundle_sha256": "ee5672ab30da2e5f2311d24ed7432c7acdafd276014490a5e9ca0a6fe0b75ab7"
+      "bundle_sha256": "2d429b506681bf3115b5f5f64c42737be0d8cfa4802cec18ece6880037350b93"
     },
     "arm64": {
       "jre": {
@@ -159,12 +159,12 @@
         {
           "name": "libstdc++",
           "architecture": "aarch64",
-          "nevra": "libstdc++-0:11.5.0-14.el9.aarch64",
-          "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/l/libstdc++-11.5.0-14.el9.aarch64.rpm",
-          "filename": "libstdc++-11.5.0-14.el9.aarch64.rpm",
-          "sha256": "ae00c5009a2ee4682ec732cde66d3f4fcfc1a7099ba7b3701767d1748a4f2683",
-          "size": 723913,
-          "source_rpm": "gcc-11.5.0-14.el9.src.rpm"
+          "nevra": "libstdc++-0:11.5.0-17.el9_9.aarch64",
+          "url": "https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/aarch64/baseos/os/Packages/l/libstdc++-11.5.0-17.el9_9.aarch64.rpm",
+          "filename": "libstdc++-11.5.0-17.el9_9.aarch64.rpm",
+          "sha256": "97894b297866395e9bfa270e4c922f57beea420351b2a0c4db07abaae096ca71",
+          "size": 726654,
+          "source_rpm": "gcc-11.5.0-17.el9_9.src.rpm"
         },
         {
           "name": "zlib",
@@ -177,7 +177,7 @@
           "source_rpm": "zlib-1.2.11-40.el9.src.rpm"
         }
       ],
-      "bundle_sha256": "d96e92b0d5b6a8b31cf16c8b62db5015416512bccce1cd5b000cc84869f58b1a"
+      "bundle_sha256": "c26e2061ed5431c666968721cf03019dc9817713a8624c6977bb527bc9627c95"
     }
   }
 }

@@ -43,7 +43,7 @@ truststore is retained; custom trust is the operator's responsibility.
 
 The guard proves presence and basic policy, not certificate validity, identity
 provider correctness or authorization. Upstream loads and validates material.
-The first increment tests real SQL in the explicit insecure profile; full TLS,
+Native tests exercise the explicit HTTPS isolated-test profile; full
 password success/failure, rotation and multi-node trust qualification remain on
 the roadmap. Do not represent guard tests as authentication qualification.
 
@@ -56,8 +56,8 @@ or entrypoint overrides if the image guard is part of the deployment's controls.
 
 `TRINO_UBI_ALLOW_INSECURE=true` is a deliberate opt-out, logs a warning on every
 start, and is only for isolated tests. It does not relax the non-root, mount or
-configuration-syntax guards. Never expose its HTTP port beyond loopback in a
-local test. `TRINO_HEAP_SIZE` is the only Java sizing override; arbitrary Java
+configuration-syntax guards. The exception now requires the [HTTPS isolated-test profile](TLS.md); plaintext
+is refused. `TRINO_HEAP_SIZE` is the only Java sizing override; arbitrary Java
 option environment variables and command-line arguments are rejected.
 
 ## Iceberg REST and S3 example
@@ -98,6 +98,7 @@ configure or qualify Lakekeeper or SeaweedFS.
 
 Property names follow Trino 484's [REST catalog documentation](https://github.com/trinodb/trino/blob/484/docs/src/main/sphinx/object-storage/metastores.md#iceberg-rest-catalog)
 and [S3 documentation](https://github.com/trinodb/trino/blob/484/docs/src/main/sphinx/object-storage/file-system-s3.md).
-Only startup, connector registration and catalog creation are tested here;
-remote authentication, table reads/writes and S3 compatibility require the
-separate cross-repository lakehouse integration test.
+The [TLS rehearsal](TLS.md) additionally exercises real REST namespace requests
+and signed S3 metadata reads through SQL against protocol fixtures. Remote
+authentication, table data reads/writes and Lakekeeper/SeaweedFS compatibility
+require the separate cross-repository lakehouse integration test.

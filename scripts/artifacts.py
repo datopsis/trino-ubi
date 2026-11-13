@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Resolve candidate locks or acquire exact locked bytes; only refresh resolves versions."""
 import argparse
-import gzip
 import hashlib
 import json
 import re
@@ -10,9 +9,10 @@ import subprocess
 import tarfile
 import tempfile
 import urllib.request
-import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
+
+from ubi_repos import RPM_ARCH, load_packages
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCK = ROOT / 'artifacts/trino.lock.json'
@@ -273,28 +273,18 @@ def base(name):
 
 
 def resolve_rpms(architecture):
-    url = f'https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/{architecture}/baseos/os/'
-    ns = {'r': 'http://linux.duke.edu/metadata/repo', 'c': 'http://linux.duke.edu/metadata/common', 'rpm': 'http://linux.duke.edu/metadata/rpm'}
-    root = ET.fromstring(get(url + 'repodata/repomd.xml'))
-    data = root.find("r:data[@type='primary']", ns)
-    raw = get(url + data.find('r:location', ns).attrib['href'])
-    if digest(raw) != data.find('r:checksum', ns).text:
-        raise ValueError('repository metadata digest mismatch')
-    packages = ET.fromstring(gzip.decompress(raw))
+    arch = next(a for a, rpm_arch in RPM_ARCH.items() if rpm_arch == architecture)
+    packages = load_packages(arch)
     result = []
     for name in ('libstdc++', 'zlib'):
-        matches = [p for p in packages if p.find('c:name', ns).text == name and p.find('c:arch', ns).text == architecture]
+        matches = [p for p in packages if p['name'] == name and p['architecture'] == architecture]
         if len(matches) != 1:
             raise ValueError(f'expected one current RPM for {name}; review repository metadata')
-        p = matches[0]
-        v = p.find('c:version', ns).attrib
-        href = p.find('c:location', ns).attrib['href']
-        result.append({'name': name, 'architecture': architecture,
-                       'nevra': f"{name}-{v['epoch']}:{v['ver']}-{v['rel']}.{architecture}",
-                       'url': url + href, 'filename': href.split('/')[-1],
-                       'sha256': p.find('c:checksum', ns).text,
-                       'size': int(p.find('c:size', ns).attrib['package']),
-                       'source_rpm': p.find('c:format/rpm:sourcerpm', ns).text})
+        resolved = matches[0]
+        item = {'name': name, 'architecture': architecture,
+                'nevra': f"{name}-{resolved['evr']}.{architecture}"}
+        item.update({k: v for k, v in resolved.items() if k not in ['name', 'architecture', 'evr']})
+        result.append(item)
     return result
 
 

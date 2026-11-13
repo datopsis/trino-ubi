@@ -53,33 +53,26 @@ fails; do not manufacture a manifest from unreviewed files.
 
 ## Isolated single-node test
 
-The bundled configuration follows upstream's supported coordinator-plus-worker
-single-node topology. **Startup refuses its unauthenticated configuration by
-default.** Only for an isolated local test, opt out explicitly:
+The bundled configuration refuses startup until the operator supplies TLS and
+credentials. For the isolated integration test, follow the [HTTPS profile](docs/TLS.md).
+`TRINO_UBI_ALLOW_INSECURE=true` waives login only; it no longer permits plaintext.
+All certificates, keys and truststores are operator-supplied read-only mounts.
 
-```sh
-podman run --rm --name trino-test --read-only --cap-drop=ALL \
-  --security-opt=no-new-privileges --pids-limit=512 --memory=3g \
-  --tmpfs /var/lib/trino:rw,noexec,nosuid,nodev,uid=10001,gid=0,mode=0750,size=512m \
-  --tmpfs /tmp/trino:rw,exec,nosuid,nodev,uid=10001,gid=0,mode=0750,size=256m \
-  -e TRINO_UBI_ALLOW_INSECURE=true -p 127.0.0.1:8080:8080 \
-  localhost/trino-ubi:dev
-```
-
-The test suite sends real HTTP requests and executes `SELECT version()`,
+The test suite sends verified HTTPS requests and executes `SELECT version()`,
 `SELECT count(*) FROM tpch.tiny.nation` (25 rows), and a query for one active
 node. It verifies the runtime identity, Java PID 1, every process's capabilities
 and no-new-privileges, read-only root, unprivileged sockets, plugin inventory,
-locked Java/server versions, shutdown, and meaningful startup failures. It also
-checks Iceberg plugin registration and `SHOW CATALOGS` with a mounted REST/S3
-catalog under the same restrictions; this proves startup, not remote queries.
+locked Java/server versions, shutdown, and meaningful startup failures. It also exercises Iceberg REST namespace listing and native S3 metadata reads
+through SQL against TLS protocol fixtures, with independent certificate negatives
+for inbound SQL, discovery, self-worker traffic, REST and S3. These fixtures do
+not qualify Lakekeeper/SeaweedFS compatibility; see the [TLS evidence boundary](docs/TLS.md).
 
 ## Runtime contract
 
 | Item | Contract |
 | --- | --- |
 | Identity | UID 10001, GID 0; no root startup or privilege transition |
-| Listeners | 8080 HTTP only with explicit insecure opt-out; 8443 HTTPS for guarded mode |
+| Listeners | 8443 HTTPS only; old HTTP port 8080 disabled |
 | Writable data | `/var/lib/trino`, owned by UID 10001; mount explicitly |
 | Writable native-library temp | `/tmp/trino`, owned by UID 10001; **exec required** by Trino native libraries, with nosuid/nodev |
 | Configuration | `/etc/trino`, mounted read-only for operator configuration |
@@ -117,8 +110,11 @@ product; `.github/requirements/` contains complete hash-pinned CI requirements;
 `.github/workflows/` runs lint, native builds/runtime, SBOM and blocking scans.
 
 Both scanners report all severities, including unfixed findings. A separate,
-tested gate fails for **any fixed High/Critical finding from either scanner**;
-missing or malformed reports also fail. There are no vulnerability suppressions.
+tested gate blocks **fixable High/Critical findings from either scanner**. Only
+RPM fixes proven absent from the build's UBI repositories are deferred, with vendor
+fix versions in the job summary and a scheduled tracking issue. Fixed non-RPM
+findings, query errors and missing/malformed reports block. See [SECURITY.md](SECURITY.md).
+There are no vulnerability suppressions.
 Reports and SPDX SBOMs are retained for 14 days even when the gate fails.
 `update-locks.yml` has read-only permissions and uploads candidates and a diff
 for review; it cannot commit or open a PR. No workflow publishes or signs an
