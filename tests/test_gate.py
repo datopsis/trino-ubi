@@ -58,7 +58,7 @@ class AvailabilityTests(unittest.TestCase):
 
     def test_non_rpm_scanner_findings_block(self):
         for kind in ['jar', 'go-module', 'python', 'rust-crate', 'npm']:
-            grype = {'descriptor': {'name': 'grype'}, 'matches': [{'artifact': {'name': 'sample', 'type': kind},
+            grype = {'descriptor': {'name': 'grype'}, 'matches': [{'artifact': {'name': 'sample', 'version': '1.0-1', 'type': kind},
                                  'vulnerability': {'id': 'CVE-test', 'severity': 'Critical',
                                                    'fix': {'state': 'fixed', 'versions': ['2.0']}}}]}
             rows, _ = gate.evaluate(gate.findings({'SchemaVersion': 2, 'Results': []}, grype), 'amd64', Mock())
@@ -82,12 +82,24 @@ class AvailabilityTests(unittest.TestCase):
         self.assertIn('no fix reported', gate.summary(rows, 'amd64'))
         query.assert_not_called()
 
+    def test_missing_installed_versions_still_fail_closed(self):
+        trivy = {'SchemaVersion': 2, 'Results': [{'Vulnerabilities': [
+            {'Severity': 'HIGH', 'VulnerabilityID': 'test', 'PkgName': 'sample'}]}]}
+        grype = {'descriptor': {'name': 'grype'}, 'matches': []}
+        with self.assertRaises(KeyError):
+            gate.findings(trivy, grype)
+        trivy['Results'] = []
+        grype['matches'] = [{'artifact': {'name': 'sample'},
+                            'vulnerability': {'id': 'test', 'severity': 'High'}}]
+        with self.assertRaises(KeyError):
+            gate.findings(trivy, grype)
+
     def test_scanner_rpm_identity(self):
         purl = 'pkg:rpm/redhat/sample@1.0-1?arch=aarch64&distro=redhat-9'
         trivy = {'SchemaVersion': 2, 'Results': [{'Type': 'redhat', 'Class': 'os-pkgs', 'Vulnerabilities': [
-            {'Severity': 'HIGH', 'VulnerabilityID': 'CVE-test', 'PkgName': 'sample', 'FixedVersion': '1.0-2',
+            {'Severity': 'HIGH', 'VulnerabilityID': 'CVE-test', 'PkgName': 'sample', 'InstalledVersion': '1.0-1', 'FixedVersion': '1.0-2',
              'PkgIdentifier': {'PURL': purl}}]}]}
-        grype = {'descriptor': {'name': 'grype'}, 'matches': [{'artifact': {'name': 'sample', 'type': 'rpm', 'purl': purl},
+        grype = {'descriptor': {'name': 'grype'}, 'matches': [{'artifact': {'name': 'sample', 'version': '1.0-1', 'type': 'rpm', 'purl': purl},
                              'vulnerability': {'id': 'CVE-test', 'severity': 'High',
                                                'namespace': 'redhat:distro:redhat:9',
                                                'fix': {'state': 'fixed', 'versions': ['0:1.0-2']}}}]}

@@ -34,7 +34,7 @@ def findings(trivy, grype):
             if item['Severity'].upper() in ['HIGH', 'CRITICAL']:
                 fixed = item.get('FixedVersion', '')
                 rows.append(dict(scanner='Trivy', id=item['VulnerabilityID'], package=item['PkgName'],
-                                 severity=item['Severity'].upper(), installed=item.get('InstalledVersion', ''),
+                                 severity=item['Severity'].upper(), installed=item['InstalledVersion'],
                                  fixes=[v.strip() for v in fixed.split(',')] if fixed else [],
                                  fix_reported=bool(fixed) or item.get('Status') == 'fixed',
                                  rpm=result.get('Class') == 'os-pkgs' and result.get('Type') == 'redhat',
@@ -45,7 +45,7 @@ def findings(trivy, grype):
             fix = vuln.get('fix', {})
             reported = bool(fix.get('versions')) or fix.get('state') == 'fixed'
             rows.append(dict(scanner='Grype', id=vuln['id'], package=artifact['name'],
-                             severity=vuln['severity'].upper(), installed=artifact.get('version', ''),
+                             severity=vuln['severity'].upper(), installed=artifact['version'],
                              fixes=fix.get('versions', []) if reported else [], fix_reported=reported,
                              rpm=artifact.get('type') == 'rpm' and vuln.get('namespace') == 'redhat:distro:redhat:9',
                              package_arch=rpm_arch(artifact.get('purl'), artifact['name'])))
