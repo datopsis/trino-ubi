@@ -162,6 +162,21 @@ class TrackingTests(unittest.TestCase):
             write([finding() | {'decision': 'block'}, finding() | {'decision': 'unfixed'}])
             self.assertEqual(before, tracker.state(directory, {'native': 'failure'}))
 
+    def test_fix_order_and_duplicate_findings_do_not_notify(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            def write(rows):
+                for arch in ['amd64', 'arm64']:
+                    (directory / arch).mkdir(exist_ok=True)
+                    (directory / arch / 'vulnerabilities.json').write_text(json.dumps(
+                        {'schema_version': 1, 'architecture': arch, 'findings': rows}))
+            row = finding() | {'decision': 'deferred', 'fixes': ['1.0-3', '1.0-2']}
+            write([row])
+            before = tracker.state(directory, {'native': 'success'})
+            row['fixes'].reverse()
+            write([row, row])
+            self.assertEqual(before, tracker.state(directory, {'native': 'success'}))
+
     def test_fingerprint_changes_for_fix_version_and_decision(self):
         value = self.state()
         changed = copy.deepcopy(value)

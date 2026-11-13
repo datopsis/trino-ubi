@@ -41,7 +41,7 @@ def state(directory, jobs):
             raise ValueError('repository query failed; previous deferred state must be preserved')
         # Only changes to the deferred set notify. New blockers/unfixed findings,
         # job outcomes, run URLs and timestamps do not change the fingerprint.
-        unique = {json.dumps({k: r[k] for k in fields}, sort_keys=True)
+        unique = {json.dumps({k: (sorted(set(r[k])) if k == 'fixes' else r[k]) for k in fields}, sort_keys=True)
                   for r in rows if r['decision'] == 'deferred'}
         result['architectures'][arch] = [json.loads(row) for row in sorted(unique)]
     return result
