@@ -121,6 +121,26 @@ def manifest(bundle):
     return ''.join(f'{digest(p.read_bytes())}  {p.relative_to(bundle)}\n' for p in files).encode()
 
 
+def install_plugin(archive_path, destination, name, version):
+    """Install one official plugin ZIP, preserving all bundled upstream JARs."""
+    with zipfile.ZipFile(archive_path) as archive:
+        prefix = f'trino-{name}-{version}'
+        for member in archive.infolist():
+            path = Path(member.filename)
+            if (path.is_absolute() or '..' in path.parts or not path.parts
+                    or path.parts[0] != prefix):
+                raise ValueError('unexpected or unsafe plugin ZIP path')
+            kind = (member.external_attr >> 16) & 0o170000
+            if kind not in (0, 0o100000, 0o040000):
+                raise ValueError('plugin ZIP links and special files forbidden')
+        with tempfile.TemporaryDirectory() as temp:
+            archive.extractall(temp)
+            source = Path(temp) / prefix
+            if not source.is_dir() or not (source / f'trino-{name}-{version}.jar').is_file():
+                raise ValueError('unexpected plugin ZIP layout')
+            shutil.copytree(source, destination)
+
+
 def acquire(lock, arch, output, candidate=False):
     validate(lock)
     verify_keys(lock)
@@ -143,7 +163,7 @@ def acquire(lock, arch, output, candidate=False):
         extract(download(lock['trino']), bundle / 'trino')
         extract(jre, bundle / 'jre')
         # The core tarball has no data connector. Retain the password plugin
-        # and add only TPCH, whose generated data exercises real split execution.
+        # and add TPCH for generated test data and opt-in OPA authorization.
         plugins = bundle / 'trino/plugin'
         actual = sorted(p.name for p in plugins.iterdir())
         if actual != lock['trino']['core_plugins']:
@@ -151,19 +171,8 @@ def acquire(lock, arch, output, candidate=False):
         for plugin in plugins.iterdir():
             if plugin.name != 'password-authenticators':
                 shutil.rmtree(plugin)
-        with zipfile.ZipFile(download(lock['tpch'])) as archive:
-            for member in archive.infolist():
-                target = (plugins / 'tpch' / member.filename).resolve()
-                if not target.is_relative_to((plugins / 'tpch').resolve()):
-                    raise ValueError('unsafe plugin ZIP path')
-                if (member.external_attr >> 16) & 0o170000 == 0o120000:
-                    raise ValueError('plugin ZIP symlinks forbidden')
-            extracted = temp / 'tpch-extracted'
-            archive.extractall(extracted)
-            entries = list(extracted.iterdir())
-            if len(entries) != 1 or entries[0].name != 'trino-tpch-' + lock['trino']['version']:
-                raise ValueError('unexpected TPCH ZIP layout')
-            shutil.copytree(entries[0], plugins / 'tpch')
+        for name in ('tpch', 'opa'):
+            install_plugin(download(lock[name]), plugins / name, name, lock['trino']['version'])
         if sorted(p.name for p in plugins.iterdir()) != lock['plugins']:
             raise ValueError('runtime plugin inventory mismatch')
         shutil.rmtree(bundle / 'trino/bin')
@@ -188,7 +197,7 @@ def acquire(lock, arch, output, candidate=False):
             shutil.copyfile(path, bundle / 'rpms' / item['filename'])
         content = manifest(bundle)
         if not candidate and digest(content) != selected['bundle_sha256']:
-            raise ValueError('extracted bundle manifest differs from lock')
+            raise ValueError(f'extracted bundle manifest differs from lock: {arch} actual SHA-256 {digest(content)}')
         (bundle / 'SHA256SUMS').write_bytes(content)
         if output.exists():
             shutil.rmtree(output)
@@ -205,10 +214,11 @@ def validate(lock):
         raise ValueError('invalid Trino version')
     version = lock['trino']['version']
     for key, filename in [('trino', f'trino-server-core-{version}.tar.gz'),
-                          ('tpch', f'trino-tpch-{version}.zip')]:
+                          ('tpch', f'trino-tpch-{version}.zip'),
+                          ('opa', f'trino-opa-{version}.zip')]:
         if lock[key]['url'] != f'https://github.com/trinodb/trino/releases/download/{version}/{filename}':
             raise ValueError('only official Trino release assets are permitted')
-    if lock['plugins'] != ['password-authenticators', 'tpch']:
+    if lock['plugins'] != ['opa', 'password-authenticators', 'tpch']:
         raise ValueError('unexpected plugin set')
     for role, name in [('builder', 'ubi-minimal'), ('runtime', 'ubi-micro')]:
         if not re.fullmatch(rf'registry.access.redhat.com/ubi9/{name}:9\.8@sha256:[0-9a-f]{{64}}', lock['bases'][role]['reference']):
@@ -305,7 +315,8 @@ def refresh(version, output):
                                'functions-python', 'geospatial', 'password-authenticators',
                                'resource-group-managers', 'session-property-managers', 'spooling-filesystem'])
     lock = {'schema': 1, 'trino': trino, 'tpch': release_asset(release, f'trino-tpch-{version}.zip'),
-            'plugins': ['password-authenticators', 'tpch'],
+            'opa': release_asset(release, f'trino-opa-{version}.zip'),
+            'plugins': ['opa', 'password-authenticators', 'tpch'],
             'bases': {role: base(name) for role, name in [('builder', 'ubi-minimal'), ('runtime', 'ubi-micro')]},
             'keys': {name: {'sha256': digest((ROOT / f'artifacts/keys/{name}.asc').read_bytes())}
                      for name in ('redhat', 'adoptium')}, 'architectures': {}}

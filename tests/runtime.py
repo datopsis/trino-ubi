@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Real HTTP SQL and fail-closed tests against the exact native container image."""
 import json
+import http.server
+import threading
 import os
 import secrets
 import shutil
@@ -96,7 +98,9 @@ def query(base, sql, context=None, credentials=None):
     rows = []
     deadline = time.monotonic() + 90
     while True:
-        assert 'error' not in result, result.get('error')
+        if 'error' in result:
+            assert not rows, 'query returned data before authorization failure'
+            raise SqlError(result['error'])
         rows.extend(result.get('data', []))
         if 'nextUri' not in result:
             return rows
@@ -155,8 +159,89 @@ def config_copy(root):
     root.mkdir()
     for name in ('config.properties', 'node.properties', 'log.properties'):
         shutil.copyfile(ROOT / 'container' / name, root / name)
-    shutil.copytree(ROOT / 'container/catalog', root / 'catalog')
+    (root / 'catalog').mkdir()
     return root
+
+
+class SqlError(Exception):
+    pass
+
+
+def rejected(base, sql, diagnostic):
+    try:
+        query(base, sql)
+    except SqlError as error:
+        detail = str(error)
+    except urllib.error.HTTPError as error:
+        assert error.code in (403, 500), error.code
+        detail = error.read().decode()
+    else:
+        raise AssertionError('authorization unexpectedly allowed the query')
+    assert diagnostic.lower() in detail.lower(), detail
+
+
+def opa_checks(temp):
+    requests = []
+    denied = threading.Event()
+
+    class Policy(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            assert self.path == '/v1/data/trino/allow'
+            payload = json.loads(self.rfile.read(int(self.headers['Content-Length'])))['input']
+            requests.append(payload)
+            allowed = not (denied.is_set() and payload['action']['operation'] == 'SelectFromColumns')
+            body = json.dumps({'result': allowed}).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(('0.0.0.0', 0), Policy)
+    worker = threading.Thread(target=server.serve_forever)
+    worker.start()
+    try:
+        cfg = config_copy(temp / 'opa')
+        shutil.copyfile(ROOT / 'tests/fixtures/tpch.properties', cfg / 'catalog/tpch.properties')
+        (cfg / 'access-control.properties').write_text(
+            'access-control.name=opa\n'
+            f'opa.policy.uri=http://host.docker.internal:{server.server_port}/v1/data/trino/allow\n'
+            'opa.http-client.connect-timeout=1s\n'
+            'opa.http-client.request-timeout=3s\n')
+        name = start(extra=['--add-host', 'host.docker.internal:host-gateway',
+                            '-v', f'{cfg}:/etc/trino:ro'], insecure=True)
+        base = endpoint(name, 8080)
+        ready(name, base)
+        assert 'Loaded system access control opa' in logs(name), logs(name)
+        sql = 'SELECT count(*) FROM tpch.tiny.nation'
+        assert query(base, sql) == [[25]]
+        selections = [r for r in requests if r['action']['operation'] == 'SelectFromColumns']
+        assert selections, requests
+        assert all(r['context']['identity']['user'] == 'runtime-test' for r in selections)
+        assert selections[-1]['action']['resource']['table']['tableName'] == 'nation'
+        print('PASS OPA plugin loads and allows real TPCH SQL with identity/resource evidence', flush=True)
+        denied.set()
+        before = len(requests)
+        rejected(base, sql, 'Access Denied')
+        assert any(r['action']['operation'] == 'SelectFromColumns' for r in requests[before:])
+        print('PASS OPA explicit deny blocks the same table query', flush=True)
+        denied.clear()
+        assert query(base, sql) == [[25]]
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=10)
+        assert not worker.is_alive()
+        rejected(base, sql, 'OPA')
+        assert json.loads(command('inspect', name).stdout)[0]['State']['Running']
+        print('PASS OPA unreachable fails closed after prior allow; Trino remains running', flush=True)
+        command('stop', '--time', '30', name)
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=10)
 
 
 def main():
@@ -164,9 +249,12 @@ def main():
     base = endpoint(name, 8080)
     ready(name, base)
     assert query(base, 'SELECT version()') == [[LOCK['trino']['version']]]
-    assert query(base, 'SELECT count(*) FROM tpch.tiny.nation') == [[25]]
+    assert query(base, 'SHOW CATALOGS') == [['system']]
+    assert command('exec', name, 'test', '-e', '/etc/trino/access-control.properties', check=False).returncode != 0
+    assert 'Installing io.trino.plugin.opa.OpaAccessControlPlugin' in logs(name), logs(name)
+    print('PASS OPA plugin loads but is inert without access-control configuration; no default catalog', flush=True)
     assert query(base, "SELECT count(*) FROM system.runtime.nodes WHERE state = 'active'") == [[1]]
-    print('PASS real SQL: version(), 25 TPCH nations, one active coordinator/worker', flush=True)
+    print('PASS unconfigured access control: version(), system catalog, one active coordinator/worker', flush=True)
     inspect_security(name)
     command('stop', '--time', '30', name)
     exit_code = json.loads(command('inspect', name).stdout)[0]['State']['ExitCode']
@@ -181,6 +269,15 @@ def main():
     with tempfile.TemporaryDirectory() as temp:
         temp = Path(temp)
         temp.chmod(0o755)
+        opa_checks(temp)
+        cfg = config_copy(temp / 'tpch-default-access-control')
+        shutil.copyfile(ROOT / 'tests/fixtures/tpch.properties', cfg / 'catalog/tpch.properties')
+        tpch = start(extra=['-v', f'{cfg}:/etc/trino:ro'], insecure=True)
+        tpch_base = endpoint(tpch, 8080)
+        ready(tpch, tpch_base)
+        assert query(tpch_base, 'SELECT count(*) FROM tpch.tiny.nation') == [[25]]
+        print('PASS no access-control configured: unchanged permissive TPCH SQL', flush=True)
+        command('stop', '--time', '30', tpch)
         empty = temp / 'empty'; empty.mkdir()
         wait_exit(start(extra=['-v', f'{empty}:/etc/trino:ro'], insecure=True), 'config.properties')
         cfg = config_copy(temp / 'password-without-tls')

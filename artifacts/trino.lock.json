@@ -25,6 +25,7 @@
     "size": 16656373
   },
   "plugins": [
+    "opa",
     "password-authenticators",
     "tpch"
   ],
@@ -134,7 +135,7 @@
           "source_rpm": "zlib-1.2.11-40.el9.src.rpm"
         }
       ],
-      "bundle_sha256": "da1995da0381dd007afd2e3078a4ee3349911be36dbc1427c37149152ca5f08d"
+      "bundle_sha256": "9e51987ad63c3839b0c5a1c44e1943116a5b095a4e6681830dd80cdf5e4b151a"
     },
     "arm64": {
       "jre": {
@@ -171,7 +172,12 @@
           "source_rpm": "zlib-1.2.11-40.el9.src.rpm"
         }
       ],
-      "bundle_sha256": "7bee57203ad6a3bd9bd268dd7f9779c89c662485a04d29a6c39f631c674e2067"
+      "bundle_sha256": "2511a7aee33643017299bb37d2a3739b97e81fad5868aa9920550eec38a7df75"
     }
+  },
+  "opa": {
+    "url": "https://github.com/trinodb/trino/releases/download/484/trino-opa-484.zip",
+    "sha256": "f8627b3f2da8950e8209ddcf8fd436cc0e536459dd438c81261593ab8310dc24",
+    "size": 15384527
   }
 }

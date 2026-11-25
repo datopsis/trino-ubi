@@ -10,10 +10,12 @@ architecture and configuration only, not production or platform qualification.
   digest with Red Hat signature verification. Both lists include Linux amd64
   and arm64.
 - Official `trino-server-core-484.tar.gz` (291,790,975 bytes), plus the separate
-  TPCH plugin ZIP. The full 860 MB server distribution is unnecessary.
-- Exactly two plugins: `password-authenticators` and `tpch`. SQL functions and
+  TPCH and OPA plugin ZIPs. The full 860 MB server distribution is unnecessary.
+- Exactly three plugins: `opa`, `password-authenticators` and `tpch`. SQL functions and
   the `system` catalog are built into the engine. No external data connector,
-  Python functions, remote cache, spooling, or optional plugin is retained.
+  Python functions, remote cache, spooling, or other optional plugin is retained.
+  **No default catalog** is shipped. OPA is **opt-in**: no access-control
+  configuration, OPA endpoint, or policy is baked into the image.
 - Temurin **JRE 25.0.5+8**, pinned separately for each architecture, with its
   Adoptium GPG signature verified. A compiler/JDK is unnecessary at runtime.
   Trino 484 requires Java 25, at least 25.0.1.
@@ -64,7 +66,7 @@ podman run --rm --name trino-test --read-only --cap-drop=ALL \
 ```
 
 The test suite sends real HTTP requests and executes `SELECT version()`,
-`SELECT count(*) FROM tpch.tiny.nation` (25 rows), and a query for one active
+`SELECT count(*) FROM tpch.tiny.nation` (25 rows, with a test-only catalog mount), and a query for one active
 node. It verifies the runtime identity, Java PID 1, every process's capabilities
 and no-new-privileges, read-only root, unprivileged sockets, plugin inventory,
 locked Java/server versions, shutdown, and meaningful startup failures.
@@ -99,7 +101,9 @@ See [configuration](docs/CONFIGURATION.md) for the exact boundary.
 The operator supplies all credentials, private keys, trust, authorization rules,
 network isolation, node identity, storage, resource limits and runtime security
 flags. Authentication alone does not implement least-privilege authorization;
-Trino's default access control is permissive. This increment is **not production
+Trino's default access control is permissive. The bundled OPA plugin changes
+nothing until the operator configures `access-control.name=opa`; see
+[OPA configuration and trust](docs/CONFIGURATION.md#opt-in-opa-authorization). This increment is **not production
 qualified**. Overriding the entrypoint or Java command bypasses image guards;
 container admission policy must prevent that where required.
 

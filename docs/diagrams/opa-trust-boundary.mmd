@@ -1,0 +1,8 @@
+flowchart LR
+    Client[SQL client] -->|Operator configured authentication and TLS| Trino[Hardened Trino 484]
+    Config[Operator read-only configuration] --> Trino
+    Trino --> System[Built-in system catalog]
+    Trino -.->|Only with an operator catalog| TPCH[Bundled TPCH generator]
+    Trino -.->|Only with access-control.name=opa: identity, action, resources over HTTPS| OPA[Operator trusted OPA endpoint]
+    Policy[Operator policy administration] --> OPA
+    OPA -.->|Allow or deny; unavailable fails closed| Trino
