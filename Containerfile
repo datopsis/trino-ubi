@@ -15,7 +15,7 @@ RUN test -n "${BUNDLE_SHA256}" \
     && test -z "$(find . ! -type f ! -type d -print -quit)" \
     && rpmkeys --root /final --checksig /bundle/rpms/*.rpm \
     && rpm --root /final --upgrade /bundle/rpms/*.rpm \
-    && mkdir -p /final/opt /final/var/lib/trino /final/tmp/trino \
+    && mkdir -p /final/opt /final/var/lib/trino /final/tmp/trino /final/etc/trino/catalog \
     && cp -a /bundle/trino /final/opt/trino \
     && cp -a /bundle/jre /final/opt/java \
     && ln -s /etc/trino /final/opt/trino/etc \
@@ -47,7 +47,6 @@ RUN rm -rf /etc/yum.repos.d /etc/pki/rpm-gpg /etc/rhsm /etc/dnf
 COPY --chmod=0555 container/entrypoint.sh /usr/local/bin/trino-entrypoint
 COPY --chmod=0555 container/healthcheck.sh /usr/local/bin/trino-healthcheck
 COPY --chmod=0444 container/config.properties container/node.properties container/log.properties /etc/trino/
-COPY --chmod=0444 container/catalog/ /etc/trino/catalog/
 COPY --chmod=0444 LICENSE THIRD_PARTY_NOTICES.md /usr/share/licenses/trino-ubi/
 ENV LANG=C.UTF-8 TZ=UTC JAVA_HOME=/opt/java PATH="/opt/java/bin:/usr/bin:/bin"
 USER 10001:0

@@ -3,14 +3,17 @@
 The only qualified topology in this increment is one coordinator that also
 executes worker tasks: `coordinator=true` and
 `node-scheduler.include-coordinator=true`. Multi-node deployment is deferred.
-The minimal plugin set serves generated TPCH data and the built-in system
-catalog, plus Iceberg for operator-supplied REST catalogs and S3-compatible
-storage. Other Iceberg catalog types and file systems are outside this image's
-supported target; Lakekeeper/SeaweedFS queries are not yet qualified.
+The minimal plugin set serves operator-configured TPCH data and the built-in
+system catalog, plus Iceberg for operator-supplied REST catalogs and S3-compatible
+storage, with optional OPA authorization. Other Iceberg catalog types and file
+systems are outside this image's supported target; Lakekeeper/SeaweedFS queries
+are not yet qualified.
 
 Mount the complete `/etc/trino` directory read-only to replace configuration.
-Required files are `config.properties`, `node.properties`, `log.properties` and
-`catalog/tpch.properties`. The entrypoint deliberately accepts a subset of Java
+Required files are `config.properties`, `node.properties` and `log.properties`.
+Catalog configuration belongs in an optional `catalog/` directory. No catalog file is shipped by default; the
+built-in `system` catalog remains available. To use TPCH, supply
+`catalog/tpch.properties` containing `connector.name=tpch`. The entrypoint deliberately accepts a subset of Java
 properties syntax for config/node/password-authenticator files: one ASCII
 `key=value` per line, blank lines and comments beginning with `#`, no duplicate
 keys, backslash escapes, control characters, continuations or `${...}` expansion.
@@ -102,3 +105,43 @@ The [TLS rehearsal](TLS.md) additionally exercises real REST namespace requests
 and signed S3 metadata reads through SQL against protocol fixtures. Remote
 authentication, table data reads/writes and Lakekeeper/SeaweedFS compatibility
 require the separate cross-repository lakehouse integration test.
+
+## Opt-in OPA authorization
+
+The image ships the official Trino 484 OPA plugin but **does not enable it**.
+Without access-control configuration, Trino retains its permissive default
+access control. Authentication and the image's TLS guard are separate controls.
+
+To enable OPA, mount `/etc/trino/access-control.properties` read-only alongside
+the other operator configuration:
+
+```properties
+access-control.name=opa
+opa.policy.uri=https://opa.example.com/v1/data/trino/allow
+```
+
+Supply the real endpoint and policy yourself. No OPA server, default allow rule,
+credentials, or trust anchor is bundled. The endpoint must return an OPA boolean
+decision, such as `{"result":false}` for denial. The plugin fails requests closed
+when it cannot obtain a policy decision, including an unreachable endpoint.
+An outage can therefore make SQL unavailable; plan OPA availability accordingly.
+Native CI tests the upstream plugin against a protocol stub, not a deployed OPA
+service or the lakehouse authorization service.
+
+OPA becomes a trusted authorization authority. Protect policy administration,
+policy distribution, DNS, endpoint integrity and availability. Use HTTPS with
+validated server trust and restrict network access; configure client trust or
+client authentication through upstream `opa.http-client.*` settings as required.
+The CI stub uses HTTPS with a fresh run CA and is confined to the ephemeral
+test runner. This does not qualify the production endpoint or client authentication. Trino sends user identity, groups, requested actions,
+and resource metadata to OPA. Protect that data and avoid request/response debug
+logging. Extra credentials are not forwarded unless explicitly configured.
+
+The operator must author and qualify default-deny policies for the intended
+operations. Row filters, column masks and batch endpoints require additional
+configuration and are not qualified by this slice. Keep
+`opa.allow-permission-management-operations` at its upstream default `false`
+unless deliberately reviewed: enabling it bulk-allows grant/role management
+operations without asking OPA. The plugin does not supply authentication or
+replace runtime hardening. See the [Trino 484 OPA documentation](https://github.com/trinodb/trino/blob/484/docs/src/main/sphinx/security/opa-access-control.md)
+and the [trust-boundary diagram](diagrams/opa-trust-boundary.mmd).

@@ -1,7 +1,7 @@
 # Artifact acquisition
 
 `artifacts/trino.lock.json` pins both UBI 9.8 manifest lists and their amd64/arm64
-child manifests and their Red Hat signatures, upstream core/TPCH/Iceberg archives,
+child manifests and their Red Hat signatures, upstream core/TPCH/Iceberg/OPA archives,
 Temurin JREs and detached signatures,
 public verification keys, added RPMs, and each extracted bundle manifest.
 The canonical build consumes this committed lock; only refresh resolves versions.
@@ -24,6 +24,11 @@ blob-cache-alluxio, blob-cache-memory, exchange-filesystem, functions-python,
 geospatial, password-authenticators, resource-group-managers,
 session-property-managers and spooling-filesystem. Only password-authenticators
 remains. Separately published TPCH and Iceberg ZIPs supply the data connectors.
+The official `trino-opa-484.zip` adds only the OPA access-control plugin, installed
+at `/opt/trino/plugin/opa` with every bundled JAR unchanged. Its SHA-256 is
+`f8627b3f2da8950e8209ddcf8fd436cc0e536459dd438c81261593ab8310dc24`.
+OPA is not enabled, and no default catalog is installed. TPCH catalog
+configuration lives only in test fixtures.
 All other plugin directories, the separate keystore-secrets-plugin directory,
 and upstream daemon launchers are removed. Native
 libraries embedded in retained JARs remain upstream bytes, not rebuilt code.

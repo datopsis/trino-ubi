@@ -79,6 +79,7 @@ jobs:
           mkdir reports
           test "$(docker inspect --format '{{.Architecture}}' "$IMAGE")" = "$ARCHITECTURE"
           docker save -o "$RUNNER_TEMP/image.tar" "$IMAGE"
+      # Includes OPA load, opt-in behavior, allow/deny and endpoint outage on each native host.
       - name: Restricted runtime and real SQL tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: python3 tests/runtime.py 2>&1 | tee reports/runtime.txt

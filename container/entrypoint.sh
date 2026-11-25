@@ -32,7 +32,6 @@ read_properties() {
 read_properties /etc/trino/config.properties config
 read_properties /etc/trino/node.properties node
 [[ -r /etc/trino/log.properties ]] || fail 'missing /etc/trino/log.properties'
-[[ -s /etc/trino/catalog/tpch.properties ]] || fail 'missing /etc/trino/catalog/tpch.properties'
 [[ ${node[node.data-dir]:-} == /var/lib/trino ]] || fail 'node.data-dir must be /var/lib/trino'
 [[ -n ${node[node.environment]:-} && -n ${node[node.id]:-} ]] || fail 'node.environment and node.id are required'
 [[ ${config[coordinator]:-} == true && ${config[node-scheduler.include-coordinator]:-} == true ]] || fail 'first increment requires coordinator=true and node-scheduler.include-coordinator=true'

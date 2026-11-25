@@ -84,7 +84,9 @@ def query(base, sql, context=None, credentials=None):
     rows = []
     deadline = time.monotonic() + 90
     while True:
-        assert 'error' not in result, result.get('error')
+        if 'error' in result:
+            assert not rows, 'query returned data before authorization failure'
+            raise SqlError(result['error'])
         rows.extend(result.get('data', []))
         if 'nextUri' not in result:
             return rows
@@ -146,9 +148,27 @@ def config_copy(root):
     root.mkdir()
     for name in ('config.properties', 'node.properties', 'log.properties'):
         shutil.copyfile(ROOT / 'container' / name, root / name)
-    shutil.copytree(ROOT / 'container/catalog', root / 'catalog')
+    (root / 'catalog').mkdir()
+    shutil.copyfile(ROOT / 'tests/fixtures/tpch.properties', root / 'catalog/tpch.properties')
     return root
 
+
+
+class SqlError(AssertionError):
+    pass
+
+
+def rejected(base, sql, diagnostic, context=None):
+    try:
+        query(base, sql, context)
+    except SqlError as error:
+        detail = str(error)
+    except urllib.error.HTTPError as error:
+        assert error.code in (403, 500), error.code
+        detail = error.read().decode()
+    else:
+        raise AssertionError('authorization unexpectedly allowed the query')
+    assert diagnostic.lower() in detail.lower(), detail
 
 
 if __name__ == '__main__':

@@ -14,7 +14,11 @@ HTTPS-only ingress on 8443, HTTPS discovery, explicit internal keystore and
 truststore, an internal shared secret and `node.internal-address`. The previous
 plaintext isolated-test profile is refused. Default authentication still
 requires PASSWORD and the guarded password file. This profile does not provide
-authorization or production qualification.
+authorization or production qualification. The separately enabled
+[OPA plugin](CONFIGURATION.md#opt-in-opa-authorization) adds authorization;
+its native stub tests use verified HTTPS and check allow, deny and endpoint
+outage behavior. No catalog is shipped by default; the TLS harness mounts
+`tests/fixtures/tpch.properties` only for its generated-data queries.
 
 Mount the operator's complete `/etc/trino` and its own `/run/tls` read-only.
 Keep UID 10001:GID 0, read-only root, all capabilities dropped,

@@ -10,11 +10,12 @@ architecture and configuration only, not production or platform qualification.
   digest with Red Hat signature verification. Both lists include Linux amd64
   and arm64.
 - Official `trino-server-core-484.tar.gz` (291,790,975 bytes), plus the separate
-  TPCH and Iceberg plugin ZIPs. The full 860 MB server distribution is unnecessary.
-- Exactly three plugins: `password-authenticators`, `tpch`, and `iceberg`. SQL
-  functions and the `system` catalog are built into the engine. Iceberg targets
+  TPCH, Iceberg and OPA plugin ZIPs. The full 860 MB server distribution is unnecessary.
+- Exactly four plugins: `iceberg`, `opa`, `password-authenticators` and `tpch`.
+  SQL functions and the `system` catalog are built into the engine. Iceberg targets
   an operator-supplied REST catalog with S3-compatible storage, static
-  credentials and path-style access. No default Iceberg catalog is shipped.
+  credentials and path-style access. **No default catalog** is shipped.
+  OPA is **opt-in**: no access-control configuration, endpoint or policy is bundled.
   See the [configuration example](docs/CONFIGURATION.md#iceberg-rest-and-s3-example).
   Lakekeeper/SeaweedFS integration qualification remains separate.
 - Temurin **JRE 25.0.5+8**, pinned separately for each architecture, with its
@@ -59,7 +60,7 @@ credentials. For the isolated integration test, follow the [HTTPS profile](docs/
 All certificates, keys and truststores are operator-supplied read-only mounts.
 
 The test suite sends verified HTTPS requests and executes `SELECT version()`,
-`SELECT count(*) FROM tpch.tiny.nation` (25 rows), and a query for one active
+`SELECT count(*) FROM tpch.tiny.nation` (25 rows, test-only catalog mount), and a query for one active
 node. It verifies the runtime identity, Java PID 1, every process's capabilities
 and no-new-privileges, read-only root, unprivileged sockets, plugin inventory,
 locked Java/server versions, shutdown, and meaningful startup failures. It also exercises Iceberg REST namespace listing and native S3 metadata reads
@@ -97,7 +98,9 @@ See [configuration](docs/CONFIGURATION.md) for the exact boundary.
 The operator supplies all credentials, private keys, trust, authorization rules,
 network isolation, node identity, storage, resource limits and runtime security
 flags. Authentication alone does not implement least-privilege authorization;
-Trino's default access control is permissive. This increment is **not production
+Trino's default access control is permissive. The bundled OPA plugin changes
+nothing until the operator configures `access-control.name=opa`; see
+[OPA configuration and trust](docs/CONFIGURATION.md#opt-in-opa-authorization). This increment is **not production
 qualified**. Overriding the entrypoint or Java command bypasses image guards;
 container admission policy must prevent that where required.
 
