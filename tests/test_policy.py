@@ -22,7 +22,7 @@ class PolicyTests(unittest.TestCase):
         artifacts = module('artifacts')
         lock = json.loads((ROOT / 'artifacts/trino.lock.json').read_text())
         artifacts.validate(lock)
-        for change in ('edition', 'digest', 'architecture', 'base'):
+        for change in ('edition', 'digest', 'architecture', 'opa', 'plugins', 'base'):
             broken = copy.deepcopy(lock)
             if change == 'edition':
                 broken['trino']['url'] = broken['trino']['url'].replace('trinodb/trino', 'untrusted/trino')
@@ -30,6 +30,10 @@ class PolicyTests(unittest.TestCase):
                 broken['trino']['sha256'] = 'bad'
             elif change == 'architecture':
                 del broken['architectures']['arm64']
+            elif change == 'opa':
+                broken['opa']['url'] = broken['opa']['url'].replace('/484/', '/483/')
+            elif change == 'plugins':
+                broken['plugins'].append('iceberg')
             else:
                 broken['bases']['runtime']['reference'] = 'registry.access.redhat.com/ubi9/ubi-micro:latest'
             with self.subTest(change=change), self.assertRaises(ValueError):
@@ -114,3 +118,19 @@ class PolicyTests(unittest.TestCase):
             with patch.object(artifacts.subprocess, 'run', side_effect=subprocess.CalledProcessError(1, 'gpg')):
                 with self.assertRaises(subprocess.CalledProcessError):
                     artifacts.verify_base_signature(path, expected, repository)
+
+    def test_plugin_zip_rejects_escape_and_special_files(self):
+        import zipfile
+        artifacts = module('artifacts')
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'plugin.zip'
+            for name, mode in [('trino-opa-484/../../escape', 0o100644),
+                               ('trino-opa-483/trino-opa-483.jar', 0o100644),
+                               ('trino-opa-484/link', 0o120777),
+                               ('trino-opa-484/device', 0o020600)]:
+                with zipfile.ZipFile(path, 'w') as archive:
+                    info = zipfile.ZipInfo(name)
+                    info.external_attr = mode << 16
+                    archive.writestr(info, b'bytes')
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    artifacts.install_plugin(path, Path(temp) / 'output', 'opa', '484')

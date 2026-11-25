@@ -25,6 +25,7 @@
     "size": 16656373
   },
   "plugins": [
+    "opa",
     "password-authenticators",
     "tpch"
   ],
@@ -173,5 +174,10 @@
       ],
       "bundle_sha256": "7bee57203ad6a3bd9bd268dd7f9779c89c662485a04d29a6c39f631c674e2067"
     }
+  },
+  "opa": {
+    "url": "https://github.com/trinodb/trino/releases/download/484/trino-opa-484.zip",
+    "sha256": "f8627b3f2da8950e8209ddcf8fd436cc0e536459dd438c81261593ab8310dc24",
+    "size": 15384527
   }
 }

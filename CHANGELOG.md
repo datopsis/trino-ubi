@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Ship the official Trino 484 OPA access-control plugin with a pinned SHA-256,
+  verified acquisition and offline assembly; leave it opt-in and preserve all
+  upstream JARs and notices.
+- Ship no default catalog. Move TPCH catalog configuration to a test-only fixture.
+- Extend both native CI runtime suites with OPA load, unconfigured behavior,
+  allow, deny and endpoint-outage fail-closed checks; document the trust boundary.
+
 - Apply the owner-approved UBI-installable fix gate: RPM fixes available in the
   build's architecture-specific repositories block; proven unavailable fixes
   remain visible as deferred. Non-RPM fixes and query/evidence errors still block.
