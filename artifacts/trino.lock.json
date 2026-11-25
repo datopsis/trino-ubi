@@ -141,7 +141,7 @@
           "source_rpm": "zlib-1.2.11-40.el9.src.rpm"
         }
       ],
-      "bundle_sha256": "2d429b506681bf3115b5f5f64c42737be0d8cfa4802cec18ece6880037350b93"
+      "bundle_sha256": "a94ad4c6fba8dcc8332338c96c490c7678633fa7d78bfaa43e8c59586f7c9501"
     },
     "arm64": {
       "jre": {
@@ -178,7 +178,7 @@
           "source_rpm": "zlib-1.2.11-40.el9.src.rpm"
         }
       ],
-      "bundle_sha256": "c26e2061ed5431c666968721cf03019dc9817713a8624c6977bb527bc9627c95"
+      "bundle_sha256": "a6fac2c7a819db39927981d55ba9c4656ed6c932fbc89301eba1829bf2a88bcd"
     }
   },
   "opa": {
