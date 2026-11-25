@@ -31,6 +31,7 @@
   },
   "plugins": [
     "iceberg",
+    "opa",
     "password-authenticators",
     "tpch"
   ],
@@ -179,5 +180,10 @@
       ],
       "bundle_sha256": "c26e2061ed5431c666968721cf03019dc9817713a8624c6977bb527bc9627c95"
     }
+  },
+  "opa": {
+    "url": "https://github.com/trinodb/trino/releases/download/484/trino-opa-484.zip",
+    "sha256": "f8627b3f2da8950e8209ddcf8fd436cc0e536459dd438c81261593ab8310dc24",
+    "size": 15384527
   }
 }

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Native image qualification; fresh JVMs and verified controls around mutations."""
 import ipaddress
+import http.server
+import threading
 import json
 import os
 import re
@@ -434,6 +436,76 @@ class Rehearsal:
             self.relay.close()
 
 
+def opa_checks(rehearsal):
+    """Exercise opt-in authorization over the draft's verified HTTPS profile."""
+    requests = []
+    denied = threading.Event()
+    rehearsal.versions['OPA'] = set()
+
+    class Policy(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            assert self.path == '/v1/data/trino/allow'
+            payload = json.loads(self.rfile.read(int(self.headers['Content-Length'])))['input']
+            requests.append(payload)
+            rehearsal.versions['OPA'].add(self.connection.version())
+            allowed = not (denied.is_set() and payload['action']['operation'] == 'SelectFromColumns')
+            body = json.dumps({'result': allowed}).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Policy)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.load_cert_chain(rehearsal.pki / 'catalog-valid.crt', rehearsal.pki / 'catalog-valid.key')
+    server.socket = context.wrap_socket(server.socket, server_side=True)
+    worker = threading.Thread(target=server.serve_forever)
+    worker.start()
+    try:
+        def configure(cfg, _material):
+            (cfg / 'access-control.properties').write_text(
+                'access-control.name=opa\n'
+                f'opa.policy.uri=https://catalog:{server.server_port}/v1/data/trino/allow\n'
+                'opa.http-client.trust-store-path=/run/tls/internal-ca.pem\n'
+                'opa.http-client.connect-timeout=1s\n'
+                'opa.http-client.request-timeout=3s\n')
+            validate_config(cfg)
+
+        name = rehearsal.start(defect=configure)
+        rt.ready(name, BASE, rehearsal.context)
+        assert 'Loaded system access control opa' in rt.logs(name)
+        sql = 'SELECT count(*) FROM tpch.tiny.nation'
+        assert rt.query(BASE, sql, rehearsal.context) == [[25]]
+        selections = [r for r in requests if r['action']['operation'] == 'SelectFromColumns']
+        assert selections
+        assert all(r['context']['identity']['user'] == 'runtime-test' for r in selections)
+        assert selections[-1]['action']['resource']['table']['tableName'] == 'nation'
+        record('OPA', 'allow', 'plugin loaded; verified HTTPS decision allows real TPCH SQL with identity/resource evidence')
+        denied.set()
+        before = len(requests)
+        rt.rejected(BASE, sql, 'Access Denied', rehearsal.context)
+        assert any(r['action']['operation'] == 'SelectFromColumns' for r in requests[before:])
+        record('OPA', 'deny', 'explicit policy denial blocks the same table query')
+        denied.clear()
+        assert rt.query(BASE, sql, rehearsal.context) == [[25]]
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=10)
+        assert not worker.is_alive()
+        rt.rejected(BASE, sql, 'OPA', rehearsal.context)
+        assert json.loads(rt.command('inspect', name).stdout)[0]['State']['Running']
+        record('OPA', 'unreachable', 'endpoint loss after prior allow fails closed while Trino remains running')
+    finally:
+        server.shutdown()
+        server.server_close()
+        worker.join(timeout=10)
+
+
 def main():
     os.umask(0o077)
     socket.getaddrinfo = resolve
@@ -443,13 +515,24 @@ def main():
     rehearsal = None
     report = {'architecture': os.environ.get('ARCHITECTURE', 'local'), 'source': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(), 'results': RESULTS}
     try:
+        rt.command('run', '--rm', '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges',
+                   '--network=none', '--entrypoint=/bin/bash', rt.IMAGE, '-c',
+                   'test -d /etc/trino/catalog && test -z "$(find /etc/trino/catalog -type f -print -quit)" && '
+                   'test ! -e /etc/trino/access-control.properties')
+        record('runtime', 'no-default-catalog', 'image has no catalog or access-control configuration')
         rehearsal = Rehearsal(root)
         report['certificates'] = rehearsal.inventory
         report['active_case'] = 'runtime/hardening'
         rehearsal.positive('inbound')
         rt.inspect_security(rehearsal.name)
+        assert 'Installing io.trino.plugin.opa.OpaAccessControlPlugin' in rt.logs(rehearsal.name)
+        assert rt.command('exec', rehearsal.name, 'test', '-e', '/etc/trino/access-control.properties', check=False).returncode != 0
+        assert 'Loaded system access control opa' not in rt.logs(rehearsal.name)
+        record('OPA', 'unconfigured', 'plugin loads but remains inert; unchanged permissive SQL succeeds')
         rehearsal.secret_isolation()
         record('runtime', 'hardening', 'restricted runtime properties preserved')
+        report['active_case'] = 'OPA authorization'
+        opa_checks(rehearsal)
         report['active_case'] = 'startup guards'
         rehearsal.fail_closed()
         for edge in ('internal', 'self-worker', 'REST', 'S3', 'inbound'):
