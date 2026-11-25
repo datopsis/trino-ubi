@@ -251,7 +251,7 @@ def main():
     assert query(base, 'SELECT version()') == [[LOCK['trino']['version']]]
     assert query(base, 'SHOW CATALOGS') == [['system']]
     assert command('exec', name, 'test', '-e', '/etc/trino/access-control.properties', check=False).returncode != 0
-    assert 'Installing io.trino.plugin.opa.OpaPlugin' in logs(name), logs(name)
+    assert 'Installing io.trino.plugin.opa.OpaAccessControlPlugin' in logs(name), logs(name)
     print('PASS OPA plugin loads but is inert without access-control configuration; no default catalog', flush=True)
     assert query(base, "SELECT count(*) FROM system.runtime.nodes WHERE state = 'active'") == [[1]]
     print('PASS unconfigured access control: version(), system catalog, one active coordinator/worker', flush=True)
