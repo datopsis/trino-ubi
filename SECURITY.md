@@ -43,3 +43,14 @@ UBI manifest, Temurin JRE and added Red Hat RPM signatures are verified. Preserv
 guard, read-only configuration, UID 10001, explicit writable paths, capability
 drop and no-new-privileges contract. See docs/CONFIGURATION.md for deployment
 responsibilities and the limits of the authentication guard.
+
+The guarded JWT profile requires HTTPS-only client access, internal TLS and a
+shared secret, an HTTPS JWKS endpoint or protected absolute mounted key file,
+and explicit issuer, audience and principal-field settings. Mixed authenticators
+are refused to prevent fallback outside that identity boundary. The insecure
+test opt-out cannot bypass JWT guards. Operators own issuer/JWKS integrity,
+trust distribution, stable principal mapping, token handling and rotation;
+authentication alone grants no least-privilege authorization. Native CI uses a
+per-run CA and HTTPS JWKS stub to verify signed-token SQL success and 401 for
+invalid or absent tokens. Live Rauthy/OpenID login and lakehouse integration
+qualification are separate. See [JWT configuration](docs/CONFIGURATION.md#guarded-jwt-authentication).

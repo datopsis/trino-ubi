@@ -5,6 +5,7 @@ import http.server
 import threading
 import os
 import secrets
+import sys
 import shutil
 import subprocess
 import tempfile
@@ -13,6 +14,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+import jwt_runtime
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCK = json.loads((ROOT / 'artifacts/trino.lock.json').read_text())
@@ -65,11 +68,13 @@ def endpoint(name, port, secure=False):
     return ('https://' if secure else 'http://') + address
 
 
-def request(url, sql=None, context=None, credentials=None):
+def request(url, sql=None, context=None, credentials=None, bearer=None):
     headers = {'X-Trino-User': 'runtime-test'}
     if credentials:
         import base64
         headers['Authorization'] = 'Basic ' + base64.b64encode(credentials.encode()).decode()
+    if bearer is not None:
+        headers['Authorization'] = 'Bearer ' + bearer
     req = urllib.request.Request(url, data=sql.encode() if sql else None, headers=headers)
     with urllib.request.urlopen(req, timeout=10, context=context) as response:
         return json.load(response)
@@ -93,8 +98,8 @@ def ready(name, base, context=None):
     raise AssertionError(f'server readiness timeout: {logs(name)}')
 
 
-def query(base, sql, context=None, credentials=None):
-    result = request(base + '/v1/statement', sql, context, credentials)
+def query(base, sql, context=None, credentials=None, bearer=None):
+    result = request(base + '/v1/statement', sql, context, credentials, bearer)
     rows = []
     deadline = time.monotonic() + 90
     while True:
@@ -108,7 +113,7 @@ def query(base, sql, context=None, credentials=None):
         # The server can advertise its internal address. Keep requests confined
         # to the explicitly published loopback endpoint.
         uri = urllib.parse.urlsplit(result['nextUri'])
-        result = request(base + uri.path + ('?' + uri.query if uri.query else ''), context=context, credentials=credentials)
+        result = request(base + uri.path + ('?' + uri.query if uri.query else ''), context=context, credentials=credentials, bearer=bearer)
 
 
 def inspect_security(name):
@@ -270,6 +275,7 @@ def main():
         temp = Path(temp)
         temp.chmod(0o755)
         opa_checks(temp)
+        jwt_runtime.checks(sys.modules[__name__], temp)
         cfg = config_copy(temp / 'tpch-default-access-control')
         shutil.copyfile(ROOT / 'tests/fixtures/tpch.properties', cfg / 'catalog/tpch.properties')
         tpch = start(extra=['-v', f'{cfg}:/etc/trino:ro'], insecure=True)
@@ -304,8 +310,7 @@ if __name__ == '__main__':
         main()
     finally:
         for container in CONTAINERS:
-            # Never print secrets. Runtime logs contain no mounted credentials
-            # in these opt-out tests; secure qualification is a separate step.
+            # Tokens and generated private keys are never printed.
             output = logs(container)
             print(f'--- diagnostics {container} ---\n{output[-16000:]}', flush=True)
             command('rm', '-f', container, check=False)
