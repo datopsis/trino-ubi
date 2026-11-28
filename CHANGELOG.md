@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Add a guarded JWT bearer authentication profile for issuer-provided tokens:
+  require HTTPS-only access, protected key material or HTTPS JWKS, explicit
+  issuer, audience and principal, and retain internal TLS/shared-secret guards.
+  Reject mixed authenticators and insecure opt-out for JWT; preserve PASSWORD.
+- Qualify JWT on both native CI architectures with a per-run CA/HTTPS JWKS stub,
+  real SQL, negative token cases, mounted public key and missing-setting guards.
+  Live Rauthy login and lakehouse T13 remain integration responsibilities.
+
 - Merge the opt-in OPA slice into the Iceberg/TLS draft with its HTTPS-only
   runtime qualification preserved; test OPA against a verified HTTPS stub.
 - Ship the official Trino 484 OPA access-control plugin with a pinned SHA-256,

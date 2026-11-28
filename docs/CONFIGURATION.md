@@ -24,7 +24,7 @@ accept only `node.*` keys. Unknown Trino properties fail in upstream validation.
 Default fail-closed requirements (the following are requirements, **not** a
 credential-bearing deployment example):
 
-- `http-server.authentication.type=PASSWORD`;
+- exactly `http-server.authentication.type=PASSWORD` or `JWT`;
 - `http-server.http.enabled=false`, `http-server.https.enabled=true`,
   `http-server.https.port=8443`;
 - insecure-over-HTTP authentication remains false;
@@ -32,7 +32,7 @@ credential-bearing deployment example):
 - a nonempty `internal-communication.shared-secret` supplied in the read-only
   config file, consistently across nodes if later multi-node qualification lands;
 - `http-server.https.keystore.path` pointing to an operator-supplied PEM/keystore;
-- `password-authenticator.properties` with `password-authenticator.name=file`
+- for PASSWORD, `password-authenticator.properties` with `password-authenticator.name=file`
   and `file.password-file` pointing to operator-created bcrypt/PBKDF2 hashes.
 
 The main config (which contains the internal secret), TLS file and password file
@@ -46,9 +46,9 @@ truststore is retained; custom trust is the operator's responsibility.
 
 The guard proves presence and basic policy, not certificate validity, identity
 provider correctness or authorization. Upstream loads and validates material.
-Native tests exercise the explicit HTTPS isolated-test profile; full
-password success/failure, rotation and multi-node trust qualification remain on
-the roadmap. Do not represent guard tests as authentication qualification.
+Native tests exercise the explicit HTTPS isolated-test and guarded JWT profiles.
+Full password success/failure, live Rauthy login, rotation and multi-node trust
+qualification remain on the roadmap.
 
 Trino upstream has no authentication by default and permissive access control.
 The operator must configure authorization, restrict network ingress/egress,
@@ -105,6 +105,59 @@ The [TLS rehearsal](TLS.md) additionally exercises real REST namespace requests
 and signed S3 metadata reads through SQL against protocol fixtures. Remote
 authentication, table data reads/writes and Lakekeeper/SeaweedFS compatibility
 require the separate cross-repository lakehouse integration test.
+
+## Guarded JWT authentication
+
+This profile accepts bearer JWTs obtained by a client from Rauthy or another
+trusted issuer. It does not implement an OpenID browser login or token exchange:
+Trino's separate OAUTH2 authenticator is outside this profile. The client obtains
+the token and submits it as `Authorization: Bearer <token>` (JDBC `accessToken`).
+Configure all the common TLS, internal-secret and file protections above, then:
+
+```properties
+http-server.authentication.type=JWT
+http-server.authentication.jwt.key-file=https://rauthy.example.com/auth/v1/oidc/certs
+http-server.authentication.jwt.required-issuer=https://rauthy.example.com/auth/v1
+http-server.authentication.jwt.required-audience=trino
+http-server.authentication.jwt.principal-field=sub
+```
+
+These are illustrative identifiers, not a deployable Rauthy configuration. Use
+that deployment's discovery metadata for the exact issuer and JWKS URL, its
+client audience, and a stable identity claim aligned with authorization policy.
+Issuer, audience and principal-field must be explicitly nonempty and contain no
+whitespace; upstream defaults do not satisfy the guard. No password-authenticator
+file is needed for JWT. A missing token or invalid signature/claims receives 401.
+
+The key source must be an HTTPS JWKS URL with a host and no embedded credentials,
+whitespace or fragment, or an absolute mounted PEM/HMAC key-file path protected
+like the TLS/password files above. HTTP URLs, relative paths and dynamic `${KID}`
+paths are refused. HTTPS server trust and hostname verification remain enabled.
+For a private CA, configure `jwk.http-client.trust-store-path` with an
+operator-provisioned truststore (including PEM CA certificates); do not disable
+TLS verification. The issuer/JWKS service and its trust roots are authentication
+authorities: restrict administration, DNS and network access, and plan key
+rotation and outages. Local HMAC keys are secrets; prefer asymmetric JWKS so
+verifiers cannot mint tokens. No trust anchor or key is baked into the image.
+
+Only one authenticator is supported. Although upstream supports combinations,
+`JWT,PASSWORD` and other lists are refused: fallback could admit identities outside
+the required issuer/audience boundary and needs its own policy and qualification.
+JWT guards apply even if `TRINO_UBI_ALLOW_INSECURE=true`; that flag cannot relax
+this profile. Plaintext HTTP must be explicitly off, HTTPS on at 8443, internal
+HTTPS and HTTPS discovery enabled, and the shared secret and TLS material present.
+This draft additionally retains explicit internal keystore/truststore files and
+`node.internal-address`; see [the TLS contract](TLS.md).
+Each missing required setting fails startup with a diagnostic naming the guard.
+
+Both native CI architectures test a valid RS256 token and configured principal
+with real SQL, an HTTPS JWKS stub with a per-run CA, and a mounted public key.
+Expired, wrong-audience, wrong-issuer, wrong-key, unsigned (`alg=none`),
+missing-principal and missing tokens must all return 401. Startup tests remove
+every required setting and reject insecure and mixed configurations, including
+attempted insecure opt-out. This is stub-based qualification, not evidence of a
+live Rauthy deployment or lakehouse T13 completion. See the
+[Trino 484 JWT contract](https://github.com/trinodb/trino/blob/484/docs/src/main/sphinx/security/jwt.md).
 
 ## Opt-in OPA authorization
 
