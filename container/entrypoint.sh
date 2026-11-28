@@ -59,8 +59,13 @@ secret_file() {
     mode=$(stat -c '%a' "$file")
     (( (8#$mode & 7) == 0 )) || fail "secret file must not be world-accessible: $file"
 }
-if [[ ${TRINO_UBI_ALLOW_INSECURE:-false} != true ]]; then
-    [[ ${config[http-server.authentication.type]:-} == PASSWORD ]] || fail 'authentication required: configure PASSWORD with TLS, or explicitly set TRINO_UBI_ALLOW_INSECURE=true for isolated tests'
+# JWT never uses the isolated-test opt-out, including alternate case and lists.
+authentication_type=${config[http-server.authentication.type]:-}
+if [[ ${TRINO_UBI_ALLOW_INSECURE:-false} != true || ${authentication_type^^} == *JWT* ]]; then
+    case ${config[http-server.authentication.type]:-} in
+        PASSWORD|JWT) ;;
+        *) fail 'authentication required: configure exactly PASSWORD or JWT with TLS; mixed authentication is unsupported' ;;
+    esac
     [[ ${config[http-server.http.enabled]:-} == false && ${config[http-server.https.enabled]:-} == true ]] || fail 'authenticated mode requires HTTPS enabled and HTTP disabled'
     [[ ${config[http-server.https.port]:-} == 8443 ]] || fail 'authenticated mode requires HTTPS port 8443'
     [[ ${config[http-server.authentication.allow-insecure-over-http]:-false} == false ]] || fail 'insecure HTTP authentication is forbidden'
@@ -69,9 +74,23 @@ if [[ ${TRINO_UBI_ALLOW_INSECURE:-false} != true ]]; then
     [[ ${config[discovery.uri]:-} == https://* ]] || fail 'authenticated mode requires HTTPS discovery.uri'
     secret_file /etc/trino/config.properties
     secret_file "${config[http-server.https.keystore.path]:-missing-keystore}"
-    read_properties /etc/trino/password-authenticator.properties auth
-    [[ ${auth[password-authenticator.name]:-} == file ]] || fail 'first increment supports the file password authenticator'
-    secret_file "${auth[file.password-file]:-missing-password-file}"
+    if [[ ${config[http-server.authentication.type]} == PASSWORD ]]; then
+        read_properties /etc/trino/password-authenticator.properties auth
+        [[ ${auth[password-authenticator.name]:-} == file ]] || fail 'first increment supports the file password authenticator'
+        secret_file "${auth[file.password-file]:-missing-password-file}"
+    else
+        for key in required-issuer required-audience principal-field; do
+            value=${config[http-server.authentication.jwt.$key]:-}
+            [[ -n $value && $value != *[[:space:]]* ]] || fail "JWT requires nonempty http-server.authentication.jwt.$key without whitespace"
+        done
+        jwt_key=${config[http-server.authentication.jwt.key-file]:-}
+        if [[ $jwt_key == https://* ]]; then
+            [[ $jwt_key =~ ^https://[^/@?#[:space:]]+(/[^[:space:]#]*)?$ ]] || fail 'JWT key-file requires an HTTPS JWKS URL without credentials or fragment'
+        else
+            [[ $jwt_key == /* ]] || fail 'JWT key-file requires an HTTPS JWKS URL or absolute mounted key file'
+            secret_file "$jwt_key"
+        fi
+    fi
 else
     printf 'WARNING: explicit insecure test mode; authentication and TLS are deployment responsibilities. Do not expose this listener.\n' >&2
 fi
