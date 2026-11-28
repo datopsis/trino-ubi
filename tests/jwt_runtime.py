@@ -73,6 +73,8 @@ def checks(r, temp):
         (cfg / 'tls.pem').write_bytes(key.read_bytes() + cert.read_bytes() + ca.read_bytes())
         (cfg / 'ca.pem').write_bytes(ca.read_bytes())
         (cfg / 'public.pem').write_bytes(public)
+        with (cfg / 'node.properties').open('a') as stream:
+            stream.write('node.internal-address=127.0.0.1\n')
         settings = dict(line.split('=', 1) for line in (cfg / 'config.properties').read_text().splitlines()
                         if line and not line.startswith('#'))
         settings.update({
@@ -82,6 +84,8 @@ def checks(r, temp):
             'http-server.https.port': '8443',
             'http-server.https.keystore.path': '/etc/trino/tls.pem',
             'internal-communication.https.required': 'true',
+            'internal-communication.https.keystore.path': '/etc/trino/tls.pem',
+            'internal-communication.https.truststore.path': '/etc/trino/ca.pem',
             'internal-communication.shared-secret': secrets.token_hex(64),
             'discovery.uri': 'https://127.0.0.1:8443',
             'http-server.authentication.jwt.key-file': f'https://host.docker.internal:{server.server_port}/jwks',
