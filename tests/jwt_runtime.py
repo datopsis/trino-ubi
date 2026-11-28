@@ -77,6 +77,7 @@ def checks(r, temp):
             stream.write('node.internal-address=127.0.0.1\n')
         settings = dict(line.split('=', 1) for line in (cfg / 'config.properties').read_text().splitlines()
                         if line and not line.startswith('#'))
+        settings.pop('http-server.http.port', None)  # Unused properties fail upstream validation.
         settings.update({
             'http-server.authentication.type': 'JWT',
             'http-server.http.enabled': 'false',
@@ -183,6 +184,7 @@ def checks(r, temp):
             ('HTTP enabled', {'http-server.http.enabled': 'true'}, 'HTTPS enabled and HTTP disabled'),
             ('HTTPS disabled', {'http-server.https.enabled': 'false'}, 'HTTPS enabled and HTTP disabled'),
             ('insecure HTTP auth', {'http-server.authentication.allow-insecure-over-http': 'true'}, 'insecure HTTP authentication'),
+            ('lowercase JWT', {'http-server.authentication.type': 'jwt'}, 'configure exactly'),
             ('mixed authentication', {'http-server.authentication.type': 'JWT,PASSWORD'}, 'mixed authentication'),
             ('blank issuer', {'http-server.authentication.jwt.required-issuer': ' '}, 'jwt.required-issuer'),
             ('empty audience', {'http-server.authentication.jwt.required-audience': ''}, 'jwt.required-audience'),

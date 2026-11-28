@@ -59,8 +59,9 @@ secret_file() {
     mode=$(stat -c '%a' "$file")
     (( (8#$mode & 7) == 0 )) || fail "secret file must not be world-accessible: $file"
 }
-# JWT never uses the isolated-test opt-out, including mixed authentication lists.
-if [[ ${TRINO_UBI_ALLOW_INSECURE:-false} != true || ${config[http-server.authentication.type]:-} == *JWT* ]]; then
+# JWT never uses the isolated-test opt-out, including alternate case and lists.
+authentication_type=${config[http-server.authentication.type]:-}
+if [[ ${TRINO_UBI_ALLOW_INSECURE:-false} != true || ${authentication_type^^} == *JWT* ]]; then
     case ${config[http-server.authentication.type]:-} in
         PASSWORD|JWT) ;;
         *) fail 'authentication required: configure exactly PASSWORD or JWT with TLS; mixed authentication is unsupported' ;;

@@ -77,7 +77,7 @@ class GuardTests(unittest.TestCase):
                                'https://user:pass@issuer.invalid/jwks', 'https://issuer.invalid/#fragment'):
                 result = run(values | {'http-server.authentication.jwt.key-file': key_source})
                 self.assertNotEqual(result.returncode, 0, key_source)
-            for profile in ('JWT,PASSWORD', 'PASSWORD,JWT'):
+            for profile in ('JWT,PASSWORD', 'PASSWORD,JWT', 'jwt', 'Jwt', 'password,jwt'):
                 result = run(values | {'http-server.authentication.type': profile}, 'true')
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn('mixed authentication', result.stderr)
