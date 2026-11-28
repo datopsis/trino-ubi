@@ -88,10 +88,10 @@ A production workload needs separate resource sizing and qualification.
 
 ## Authentication and deployment responsibility
 
-Without `TRINO_UBI_ALLOW_INSECURE=true`, the entrypoint requires PASSWORD
+Without `TRINO_UBI_ALLOW_INSECURE=true`, the entrypoint requires exactly PASSWORD or guarded JWT
 authentication, HTTPS enabled on 8443, HTTP disabled, internal HTTPS and a shared
 secret, HTTPS discovery, and readable, non-writable, non-world-accessible TLS
-and password files. It rejects missing, duplicate or ambiguous guard properties.
+and profile-specific key/password files. It rejects missing, duplicate or ambiguous guard properties.
 Trino validates the actual certificates, password hashes, and remaining settings.
 See [configuration](docs/CONFIGURATION.md) for the exact boundary.
 

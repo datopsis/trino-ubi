@@ -91,11 +91,30 @@ if [[ -e /etc/trino/truststore.properties ]]; then
                     "-Djavax.net.ssl.trustStoreType=PKCS12"
                     "-Djavax.net.ssl.trustStorePassword=$trust_password")
 fi
-if [[ ${TRINO_UBI_ALLOW_INSECURE:-false} != true ]]; then
-    [[ ${config[http-server.authentication.type]:-} == PASSWORD ]] || fail 'authentication required: configure PASSWORD with TLS, or explicitly set TRINO_UBI_ALLOW_INSECURE=true for isolated tests'
-    read_properties /etc/trino/password-authenticator.properties auth
-    [[ ${auth[password-authenticator.name]:-} == file ]] || fail 'first increment supports the file password authenticator'
-    secret_file "${auth[file.password-file]:-missing-password-file}"
+# JWT never uses the isolated-test opt-out, including alternate case and lists.
+authentication_type=${config[http-server.authentication.type]:-}
+if [[ ${TRINO_UBI_ALLOW_INSECURE:-false} != true || ${authentication_type^^} == *JWT* ]]; then
+    case ${config[http-server.authentication.type]:-} in
+        PASSWORD|JWT) ;;
+        *) fail 'authentication required: configure exactly PASSWORD or JWT with TLS; mixed authentication is unsupported' ;;
+    esac
+    if [[ ${config[http-server.authentication.type]} == PASSWORD ]]; then
+        read_properties /etc/trino/password-authenticator.properties auth
+        [[ ${auth[password-authenticator.name]:-} == file ]] || fail 'first increment supports the file password authenticator'
+        secret_file "${auth[file.password-file]:-missing-password-file}"
+    else
+        for key in required-issuer required-audience principal-field; do
+            value=${config[http-server.authentication.jwt.$key]:-}
+            [[ -n $value && $value != *[[:space:]]* ]] || fail "JWT requires nonempty http-server.authentication.jwt.$key without whitespace"
+        done
+        jwt_key=${config[http-server.authentication.jwt.key-file]:-}
+        if [[ $jwt_key == https://* ]]; then
+            [[ $jwt_key =~ ^https://[^/@?#[:space:]]+(/[^[:space:]#]*)?$ ]] || fail 'JWT key-file requires an HTTPS JWKS URL without credentials or fragment'
+        else
+            [[ $jwt_key == /* ]] || fail 'JWT key-file requires an HTTPS JWKS URL or absolute mounted key file'
+            secret_file "$jwt_key"
+        fi
+    fi
 else
     [[ ${#trust_options[@]} == 3 ]] || fail 'isolated HTTPS tests require truststore.properties'
     printf 'WARNING: isolated HTTPS test mode waives login; network isolation and authorization remain operator responsibilities.\n' >&2

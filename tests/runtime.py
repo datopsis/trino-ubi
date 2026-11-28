@@ -2,6 +2,9 @@
 """Shared restricted-container helpers for native TLS qualification."""
 import json
 import os
+import secrets
+import sys
+import tempfile
 import shutil
 import ssl
 import subprocess
@@ -16,10 +19,32 @@ LOCK = json.loads((ROOT / 'artifacts/trino.lock.json').read_text())
 RUNTIME = os.environ.get('CONTAINER_RUNTIME', 'podman')
 IMAGE = os.environ.get('IMAGE', 'localhost/trino-ubi:dev')
 TLS_VERSIONS = set()
+CONTAINERS = []
 
 
 def command(*args, check=True, **kwargs):
     return subprocess.run([RUNTIME, *args], check=check, text=True, capture_output=True, **kwargs)
+
+
+def start(extra=(), mounts=True, insecure=False, port=8080, native_tmp=True):
+    name = 'trino-test-' + secrets.token_hex(6)
+    args = ['run', '-d', '--name', name, '--read-only', '--cap-drop=ALL',
+            '--security-opt=no-new-privileges', '--pids-limit=512', '--memory=3g',
+            '-p', f'127.0.0.1::{port}']
+    if native_tmp:
+        args += ['--tmpfs', '/tmp/trino:rw,exec,nosuid,nodev,uid=10001,gid=0,mode=0750,size=256m']
+    if mounts:
+        args += ['--tmpfs', '/var/lib/trino:rw,noexec,nosuid,nodev,uid=10001,gid=0,mode=0750,size=512m']
+    if insecure:
+        args += ['-e', 'TRINO_UBI_ALLOW_INSECURE=true']
+    CONTAINERS.append(name)
+    command(*args, *extra, IMAGE)
+    return name
+
+
+def endpoint(name, port, secure=False):
+    address = command('port', name, str(port)).stdout.strip().splitlines()[0]
+    return ('https://' if secure else 'http://') + address
 
 
 def logs(name):
@@ -46,13 +71,15 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise AssertionError('unexpected redirect from TLS endpoint')
 
 
-def request(url, sql=None, context=None, credentials=None):
+def request(url, sql=None, context=None, credentials=None, bearer=None):
     assert url.startswith('https://')
     assert context is not None and context.check_hostname and context.verify_mode == ssl.CERT_REQUIRED
     headers = {'X-Trino-User': 'runtime-test'}
     if credentials:
         import base64
         headers['Authorization'] = 'Basic ' + base64.b64encode(credentials.encode()).decode()
+    if bearer is not None:
+        headers['Authorization'] = 'Bearer ' + bearer
     req = urllib.request.Request(url, data=sql.encode() if sql else None, headers=headers)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}),
                                           urllib.request.HTTPSHandler(context=context), NoRedirect())
@@ -79,8 +106,8 @@ def ready(name, base, context=None):
     raise AssertionError(f'server readiness timeout: {logs(name)}')
 
 
-def query(base, sql, context=None, credentials=None):
-    result = request(base + '/v1/statement', sql, context, credentials)
+def query(base, sql, context=None, credentials=None, bearer=None):
+    result = request(base + '/v1/statement', sql, context, credentials, bearer)
     rows = []
     deadline = time.monotonic() + 90
     while True:
@@ -95,7 +122,7 @@ def query(base, sql, context=None, credentials=None):
         # to the explicitly published loopback endpoint.
         uri = urllib.parse.urlsplit(result['nextUri'])
         assert uri.scheme == 'https' and uri.netloc == urllib.parse.urlsplit(base).netloc, 'nextUri downgrade or unexpected authority'
-        result = request(base + uri.path + ('?' + uri.query if uri.query else ''), context=context, credentials=credentials)
+        result = request(base + uri.path + ('?' + uri.query if uri.query else ''), context=context, credentials=credentials, bearer=bearer)
 
 
 def inspect_security(name):
@@ -172,5 +199,15 @@ def rejected(base, sql, diagnostic, context=None):
 
 
 if __name__ == '__main__':
+    import jwt_runtime
+    try:
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            temp.chmod(0o755)
+            jwt_runtime.checks(sys.modules[__name__], temp)
+    finally:
+        for container in CONTAINERS:
+            print(f'--- JWT diagnostics {container} ---\n{logs(container)[-16000:]}', flush=True)
+            command('rm', '-f', container, check=False)
     from tls_runtime import main
     main()
